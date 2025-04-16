@@ -545,3 +545,4 @@ class MedicalWebexIntegration:
             patient_email: 환자 이메일
             patient_name: 환자
 (Content truncated due to size limit. Use line ranges to read in chunks)
+        """
