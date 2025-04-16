@@ -1,0 +1,100 @@
+Using the bidirectional LSTM structure, we capture the bidirectional context of time-series data and model the long-range dependence based on the transformer architecture. We applied a MAML algorithm to enable personalized learning. \mbox{}\protect\newline Model training was conducted in two steps. First, the initial weights of the model were learned using a dataset. Subsequently, fine-tuning was performed to quickly adapt to the data of individual patients by applying the MAML algorithm.
+
+\subsection*{Bidirectional Long Short-Term Memory}
+A Bidirectional Long Short-Term Memory (Bi-LSTM) network was employed to effectively model temporal dependencies in CGM data. Bi-LSTM processes input sequences in both the forward and backward directions, enabling the model to capture both past and future contexts simultaneously~\cite{2611532:32776386}. This dual processing method improves the ability to learn complex temporal patterns, making it particularly suitable for time-series prediction tasks.
+
+In the forward direction, LSTM computes the following at each time step \( t \) expressed as follows:
+\begin{equation}
+\begin{aligned}
+i_t &= \sigma \big(W_{xi}\, x_t + W_{hi}\, \overrightarrow{h}_{t-1} + b_i\big), \\
+f_t &= \sigma \big(W_{xf}\, x_t + W_{hf}\, \overrightarrow{h}_{t-1} + b_f\big), \\
+\tilde{c}_t &= \tanh\big(W_{xc}\, x_t + W_{hc}\, \overrightarrow{h}_{t-1} + b_c\big), \\
+c_t &= f_t \odot c_{t-1} + i_t \odot \tilde{c}_t, \\
+o_t &= \sigma \big(W_{xo}\, x_t + W_{ho}\, \overrightarrow{h}_{t-1} + b_o\big), \\
+\overrightarrow{h}_t &= o_t \odot \tanh(c_t).
+\end{aligned}
+\label{dfg-b70a0c7f1921}
+\end{equation}
+
+\begin{itemize}
+  \item \( i_t \), \( f_t \), and \( o_t \) represent the input, forget, and output gates, respectively.
+  \item \( c_t \) is the cell state at time \( t \), and \( \overrightarrow{h_t} \) is the forward hidden state.
+  \item \( w_\ast \) and \( b_\ast \) denote learnable weight matrices and biases.
+  \item \( \sigma (\cdot) \) is the sigmoid activation function, and \( \tanh(\cdot) \) is the hyperbolic tangent function.
+\end{itemize}
+
+\begin{itemize}
+  \item Backward LSTM Equations
+\end{itemize}
+In the backward direction, the LSTM processes the input sequence in reverse order. The equations are analogous to those of the forward LSTM but use a separate set of parameters as follows:
+\begin{equation}
+\begin{aligned}
+\overleftarrow{i}_t &= \sigma \big(W'_{xi}\, x_t + W'_{hi}\, \overleftarrow{h}_{t+1} + b'_i\big), \\
+\overleftarrow{f}_t &= \sigma \big(W'_{xf}\, x_t + W'_{hf}\, \overleftarrow{h}_{t+1} + b'_f\big), \\
+\overleftarrow{\tilde{c}}_t &= \tanh\big(W'_{xc}\, x_t + W'_{hc}\, \overleftarrow{h}_{t+1} + b'_c\big), \\
+\overleftarrow{c}_t &= \overleftarrow{f}_t \odot \overleftarrow{c}_{t+1} + \overleftarrow{i}_t \odot \overleftarrow{\tilde{c}}_t, \\
+\overleftarrow{o}_t &= \sigma \big(W'_{xo}\, x_t + W'_{ho}\, \overleftarrow{h}_{t+1} + b'_o\big), \\
+\overleftarrow{h}_t &= \overleftarrow{o}_t \odot \tanh(\overleftarrow{c}_t).
+\end{aligned}
+\label{dfg-11058f3d808a}
+\end{equation}
+
+\begin{itemize}
+  \item Hidden State Concatenation
+\end{itemize}
+The hidden states from both forward \( \overrightarrow{h_t} \) and backward \( \overleftarrow{h_t} \) passes are concatenated to form a comprehensive representation at each time step as follows:
+\begin{equation}
+h^{\text{Bi}}_t = \begin{bmatrix} \overrightarrow{h}_t \\ \overleftarrow{h}_t \end{bmatrix}
+\label{dfg-9414f879b911}
+\end{equation}
+
+This concatenated representation combines information from both directions and serves as input to the subsequent layers.
+
+\begin{itemize}
+  \item Output Layer
+\end{itemize}
+The final prediction for each time step is obtained by applying a fully connected layer to the concatenated hidden state as follows:
+\begin{equation}
+y_t = W_o \, h^{\text{Bi}}_t + b_o
+\label{dfg-2db508ca4efe}
+\end{equation}
+where \( w_o \) and \( b_o \) are trainable parameters of the output layer.
+
+\subsection*{Transformer}
+Below is a description of the transformer module for our BG prediction model, with an emphasis on the key mathematical equations and their roles. The design follows the original transformer architecture introduced by Vaswani et al.~\cite{2611532:32775701}.
+
+\subsubsection*{Input Embedding and Positional Encoding}
+Because the transformer lacks recurrence, an explicit mechanism is required to capture the sequence order. First, raw CGM features were converted into embeddings. Positional encoding is then added to the embeddings. Positional encoding is defined as follows:
+\begin{equation}
+\begin{aligned}
+PE(pos,2i) &= \sin\left(\frac{pos}{10000^{\frac{2i}{d_{model}}}}\right), \\
+PE(pos,2i+1) &= \cos\left(\frac{pos}{10000^{\frac{2i}{d_{model}}}}\right).
+\end{aligned}
+\label{dfg-f4f692ad5a04}
+\end{equation}
+These equations assign unique sine and cosine values to each position in the sequence, effectively providing the model with information regarding the ordering of sequence elements. This technique enables the transformer to capture the sequential structure even though it processes all the tokens simultaneously.
+
+\subsubsection*{Self-Attention Mechanism}
+The core of the transformer is the self-attention mechanism, which dynamically computes the relationships between tokens (or time points in our CGM data). The process begins by projecting input \( X \) into three matrices: queries \( Q \), keys \( K \), and values \( V \) using learned linear projections. For a given input sequence \( X \),
+\begin{equation}
+Q = XW^{Q}, \quad K = XW^{K}, \quad V = XW^{V}
+\label{dfg-83d7e7682db6}
+\end{equation}
+Then, the scaled dot-product attention is computed as follows:
+\begin{equation}
+\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
+\label{dfg-6425043c282f}
+\end{equation}
+In the attention formula, \( QK^{T} \) calculates the similarity between the elements, and the scaling factor \( \sqrt{d_k} \) (where \( d_k \) is the dimension of the key vectors) ensures the numerical stability. The SoftMax function normalized these similarities into weights that determined the contribution of each element to the final attention-output. This mechanism allowed the model to focus on different parts of the input sequence.
+
+\subsubsection*{Multi-Head Attention}
+Instead of performing a single-attention operation, multiple attention ``heads'' were computed in parallel. Each head applied its own linear transformations as follows:
+\begin{equation}
+\text{head}_i = \text{Attention}(XW_i^{Q}, XW_i^{K}, XW_i^{V})
+\label{dfg-eacff43ea2b9}
+\end{equation}
+These are then concatenated and projected to form the final multi-head output:
+\begin{equation}
+\text{MultiHead}(X) = \text{Concat}(\text{head}_1, \dots, \text{head}_h)W^{O}
+\label{dfg-b89c61449178}
+\end{equation}

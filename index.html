@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pGluc-Webex 모바일 앱 프로토타입</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #0052cc;
+            --secondary-color: #00a0d1;
+            --danger-color: #e94f37;
+            --warning-color: #f7a800;
+            --success-color: #36b37e;
+            --bg-light: #f5f7fa;
+            --text-dark: #253858;
+            --text-light: #6b778c;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            padding-bottom: 70px; /* 하단 네비게이션 바 공간 확보 */
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .navbar {
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card {
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+            border: none;
+        }
+        
+        .card-header {
+            background-color: white;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            font-weight: 600;
+            padding: 15px 20px;
+        }
+        
+        .glucose-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .glucose-unit {
+            font-size: 1rem;
+            color: var(--text-light);
+        }
+        
+        .glucose-trend {
+            font-size: 1.2rem;
+            margin-left: 10px;
+        }
+        
+        .trend-up {
+            color: var(--danger-color);
+        }
+        
+        .trend-down {
+            color: var(--warning-color);
+        }
+        
+        .trend-stable {
+            color: var(--success-color);
+        }
+        
+        .prediction-card {
+            background-color: #f0f7ff;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .prediction-value {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        
+        .prediction-time {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+        
+        .alert-card {
+            border-left: 4px solid var(--danger-color);
+            background-color: #fff8f8;
+        }
+        
+        .alert-warning {
+            border-left: 4px solid var(--warning-color);
+            background-color: #fffbf0;
+        }
+        
+        .alert-title {
+            font-weight: 600;
+            color: var(--danger-color);
+        }
+        
+        .alert-warning .alert-title {
+            color: var(--warning-color);
+        }
+        
+        .btn-emergency {
+            background-color: var(--danger-color);
+            border: none;
+            border-radius: 50px;
+            padding: 10px 20px;
+            font-weight: 600;
+        }
+        
+        .btn-emergency:hover {
+            background-color: #d03e27;
+        }
+        
+        .btn-action {
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 50px;
+            padding: 8px 16px;
+            font-weight: 600;
+            color: white;
+        }
+        
+        .btn-action:hover {
+            background-color: #0047b3;
+            color: white;
+        }
+        
+        .btn-outline-action {
+            border: 1px solid var(--primary-color);
+            border-radius: 50px;
+            padding: 8px 16px;
+            font-weight: 600;
+            color: var(--primary-color);
+            background-color: white;
+        }
+        
+        .btn-outline-action:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background-color: white;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+            padding: 12px 0;
+            z-index: 1000;
+        }
+        
+        .nav-item {
+            text-align: center;
+        }
+        
+        .nav-link {
+            color: var(--text-light);
+            font-size: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .nav-link i {
+            font-size: 1.5rem;
+            margin-bottom: 4px;
+        }
+        
+        .nav-link.active {
+            color: var(--primary-color);
+        }
+        
+        .chart-container {
+            height: 200px;
+            margin: 20px 0;
+        }
+        
+        .time-selector {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        
+        .time-btn {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            background-color: white;
+            border: 1px solid #e0e0e0;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+        
+        .time-btn:first-child {
+            border-radius: 50px 0 0 50px;
+        }
+        
+        .time-btn:last-child {
+            border-radius: 0 50px 50px 0;
+        }
+        
+        .time-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        
+        .log-item {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .log-time {
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+        
+        .log-value {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        
+        .log-source {
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            border-radius: 50px;
+            background-color: #e0f0ff;
+            color: var(--primary-color);
+        }
+        
+        .modal-content {
+            border-radius: 12px;
+            border: none;
+        }
+        
+        .modal-header {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .modal-title {
+            font-weight: 600;
+        }
+        
+        .webex-logo {
+            height: 24px;
+            margin-right: 8px;
+        }
+        
+        /* 로딩 화면 스타일 */
+        .loading-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+            color: var(--primary-color);
+        }
+        
+        .loading-text {
+            margin-top: 20px;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <!-- 네비게이션 바 -->
+    <nav class="navbar navbar-light">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <img src="https://www.webex.com/content/dam/wbx/global/images/webex-teams.svg" alt="Webex Logo" class="webex-logo">
+                pGluc-Webex
+            </a>
+            <div>
+                <button class="btn btn-sm btn-outline-action" id="profileBtn">
+                    <i class="bi bi-person-circle"></i> 김민수
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 메인 컨텐츠 -->
+    <div class="container mt-4" id="homeContent">
+        <!-- 현재 혈당 카드 -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>현재 혈당</span>
+                <span class="log-time">최근 업데이트: 5분 전</span>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="glucose-value">118</div>
+                    <div class="glucose-unit">mg/dL</div>
+                    <div class="glucose-trend trend-stable">
+                        <i class="bi bi-arrow-right"></i>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: 60%;" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-2">
+                        <small class="text-muted">70 mg/dL</small>
+                        <small class="text-muted">180 mg/dL</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 예측 카드 -->
+        <div class="card prediction-card">
+            <div class="card-header">
+                <i class="bi bi-graph-up"></i> 혈당 예측
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6">
+                        <div class="prediction-time">30분 후</div>
+                        <div class="prediction-value">125 <span class="glucose-unit">mg/dL</span></div>
+                        <div class="glucose-trend trend-up">
+                            <i class="bi bi-arrow-up"></i> +7
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="prediction-time">60분 후</div>
+                        <div class="prediction-value">132 <span class="glucose-unit">mg/dL</span></div>
+                        <div class="glucose-trend trend-up">
+                            <i class="bi bi-arrow-up"></i> +14
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-outline-action" id="viewPredictionBtn">
+                        <i class="bi bi-graph-up"></i> 상세 예측 보기
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 긴급 원격 진료 버튼 -->
+        <div class="d-grid gap-2 mb-4">
+            <button class="btn btn-emergency" id="emergencyBtn">
+                <i class="bi bi-camera-video-fill"></i> 긴급 원격 진료 연결
+            </button>
+        </div>
+
+        <!-- 최근 알림 -->
+        <div class="card alert-warning">
+            <div class="card-header">
+                <i class="bi bi-bell"></i> 최근 알림
+            </div>
+            <div class="card-body">
+                <h5 class="alert-title">
+                    <i class="bi bi-exclamation-triangle"></i> 저혈당 위험 감지
+                </h5>
+                <p>오늘 오전 3시 25분에 혈당이 65 mg/dL로 측정되었으며, 30분 후 55 mg/dL까지 하락할 것으로 예측됩니다.</p>
+                <div class="alert-actions">
+                    <button class="btn btn-sm btn-action">
+                        <i class="bi bi-check-circle"></i> 조치 완료
+                    </button>
+                    <button class="btn btn-sm btn-outline-action ms-2">
+                        <i class="bi bi-info-circle"></i> 상세 정보
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 최근 기록 -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clock-history"></i> 최근 기록</span>
+                <button class="btn btn-sm btn-outline-action" id="viewAllLogsBtn">
+                    모두 보기
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div class="log-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="log-time">오늘 08:30</div>
+                        <div class="log-value">118 mg/dL</div>
+                    </div>
+                    <span class="log-source">CGM</span>
+                </div>
+                <div class="log-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="log-time">오늘 08:25</div>
+                        <div class="log-value">115 mg/dL</div>
+                    </div>
+                    <span class="log-source">CGM</span>
+                </div>
+                <div class="log-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="log-time">오늘 08:20</div>
+                        <div class="log-value">112 mg/dL</div>
+                    </div>
+                    <span class="log-source">CGM</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 차트 화면 -->
+    <div class="container mt-4" id="chartContent" style="display: none;">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-graph-up"></i> 혈당 추세
+            </div>
+            <div class="card-body">
+                <div class="time-selector">
+                    <button class="time-btn active">3시간</button>
+                    <button class="time-btn">6시간</button>
+                    <button class="time-btn">12시간</button>
+                    <button class="time-btn">24시간</button>
+                </div>
+                <div class="chart-container">
+                    <canvas id="glucoseChart"></canvas>
+                </div>
+                <div class="d-flex justify-content-between mt-3">
+                    <div>
+                        <div class="text-muted small">평균 혈당</div>
+                        <div class="fw-bold">124 mg/dL</div>
+                    </div>
+                    <div>
+                        <div class="text-muted small">표준 편차</div>
+                        <div class="fw-bold">18 mg/dL</div>
+                    </div>
+                    <div>
+                        <div class="text-muted small">목표 범위 시간</div>
+                        <div class="fw-bold">85%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="bi bi-graph-up"></i> 예측 분석
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="predictionChart"></canvas>
+                </div>
+                <div class="mt-3">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 현재 추세가 지속된다면 다음 2시간 동안 혈당이 목표 범위 내에 유지될 것으로 예상됩니다.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로그 화면 -->
+    <div class="container mt-4" id="logContent" style="display: none;">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clock-history"></i> 혈당 기록</span>
+                <div>
+                    <button class="btn btn-sm btn-outline-action" id="addLogBtn">
+                        <i class="bi bi-plus"></i> 수동 입력
+                    </button>
+                    <button class="btn btn-sm btn-outline-action ms-2" id="filterLogBtn">
+                        <i class="bi bi-funnel"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="log-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="log-time">오늘 08:30</div>
+                        <div class="log-value">118 m
+(Content truncated due to size limit. Use line ranges to read in chunks)
