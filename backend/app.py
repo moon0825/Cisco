@@ -79,7 +79,7 @@ def get_recent_glucose_features(patient_id, limit=12):
 
 # 서버 시작 시 백그라운드 루프 시작
 # --- Flask 앱 설정 ---
-app = Flask(__name__,)
+app = Flask(__name__,static_folder=None)
 # CORS 설정: 프론트엔드 Vercel 주소를 명시적으로 허용하는 것이 좋음
 FRONTEND_URL = os.environ.get("FRONTEND_URL","https://127.0.0.1:5371") # 기본값 설정
 CORS(app, origins=[FRONTEND_URL, "http://localhost:5000","*"], supports_credentials=True) # 로컬 및 배포 주소 허용

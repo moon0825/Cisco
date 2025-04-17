@@ -383,7 +383,7 @@
                         <div class="log-time">${moment(reading.timestamp).tz("Asia/Seoul").format('YYYY-MM-DD HH:mm')}</div>
                         <div class="log-value">${reading.glucose.toFixed(2)} mg/dL</div>
                     </div>
-                    <span class="log-source">${reading.source || 'Unknown'}</span>`;
+                    <span class="log-source">${reading.source || 'CGM'}</span>`;
                 allLogsContainerEl.appendChild(logDiv);
             });
         }
@@ -409,7 +409,7 @@
                 <div class="log-time">${moment(state.time).tz("Asia/Seoul").format('YYYY-MM-DD HH:mm')}</div>
                 <div class="log-value">${label}</div>
             </div>
-            <span class="log-source">${combinedStr || '상세 없음'}</span>
+            <span class="log-source">${state.meal || '상세 없음'}</span>
         `;
         stateLogsContainerEl.appendChild(logDiv);
     });
