@@ -8,7 +8,7 @@ from datetime import datetime
 import math
 
 # Firebase 초기화 (중복 초기화 방지)
-cred = credentials.Certificate("glucosecisco-firebase-adminsdk-fbsvc-a4317e66fb.json")
+cred = credentials.Certificate("ccccssss2-bde41-firebase-adminsdk-fbsvc-9438d30e40.json")
 if not firebase_admin._apps:
     initialize_app(cred)
 db = firestore.client()
@@ -151,37 +151,56 @@ def min_max_unscale(scaled_data, min_val, max_val):
 
 
 # 미래 시점 예측 함수
-def predict_future(model_trainer, recent_data, future_steps=100):  # 100개 시점 예측
+def predict_future(model_trainer, recent_data, future_steps=15):
     timestamps = [x[0] for x in recent_data]
     features = [x[1:] for x in recent_data]
-    support_inputs = np.array(features, dtype=np.float32)
     glucose_values = np.array([x[1] for x in recent_data], dtype=np.float32).reshape(-1, 1)
 
-    glucose_min, glucose_max = 70, 400
-    support_targets = min_max_scale(glucose_values, glucose_min, glucose_max)
+    # ✅ glucose_level만 scaling (index 0)
+    glucose_min, glucose_max = 80, 600
+    glucose_scaled = (glucose_values - glucose_min) / (glucose_max - glucose_min)
 
+    # 전체 입력 = scaled glucose + 나머지 그대로
+    features_np = np.array(features, dtype=np.float32)
+    support_inputs = np.concatenate([glucose_scaled, features_np[:, 1:]], axis=1)
+
+    # ❗ target도 glucose만 사용 (seq_length 만큼)
+    support_targets = glucose_scaled
+
+    # Adaptation
     adapted_model = model_trainer.inner_update(model_trainer.model, support_inputs, support_targets)
 
-    # ✅ 시간 간격 계산
-    if len(timestamps) >= 2:
-        time_step = timestamps[-1] - timestamps[-2]
-    else:
-        time_step = 180  # 기본 3분 간격
-
-    # ✅ 미래 timestamp 생성 (진짜 마지막 이후)
+    # 시간 처리
+    time_step = timestamps[-1] - timestamps[-2] if len(timestamps) >= 2 else 300
     last_timestamp = timestamps[-1]
     future_timestamps = [last_timestamp + (i + 1) * time_step for i in range(future_steps)]
     future_timestamps_str = [unix_to_timestamp(ts) for ts in future_timestamps]
 
-    # 예측 입력은 모두 0으로 초기화
-    future_inputs = np.zeros((future_steps, 8), dtype=np.float32)
+    # future input 준비: 최근 step 그대로 유지
+    last_input = support_inputs[-1].copy()  # shape: (8,)
+    future_inputs = []
+    for i in range(future_steps):
+        step_input = last_input.copy()
+
+        if i >= 6:
+            step_input[1] = 0  # meal
+            step_input[2] = 0  # exercise
+        if i >= 4:
+            step_input[3] = 0  # stressors
+        if i >= 3:
+            step_input[4] = 0  # hypo_event
+
+        future_inputs.append(step_input)
+
     future_inputs = torch.tensor(future_inputs, dtype=torch.float32)
 
     with torch.no_grad():
         predictions = adapted_model(future_inputs).cpu().numpy()
-    predictions = min_max_unscale(predictions, glucose_min, glucose_max)
 
-    return list(zip(future_timestamps_str, predictions.flatten()))
+    # ✅ glucose_level만 역변환
+    predictions_unscaled = predictions * (glucose_max - glucose_min) + glucose_min
+
+    return list(zip(future_timestamps_str, predictions_unscaled.flatten()))
 
 
 # Firestore에 예측 결과 저장 (timestamp를 키로 사용)
@@ -202,7 +221,7 @@ def save_predictions(username, predictions):
 
 
 # 데이터 개수 확인 및 예측 루프
-def monitor_and_predict(model_trainer, username, target_count=10, check_interval=60, future_steps=50):
+def monitor_and_predict(model_trainer, username, target_count=64, check_interval=60, future_steps=15):
     collection_ref = db.collection(f"users/{username}/glulog")
 
     while True:
@@ -250,20 +269,20 @@ def run_prediction_task():
         output_dim=1,
         nhead=8,
         num_layers=2,
-        dropout=0.2
+        dropout=0.1
     )
-    trainer = MAMLTrainer(pretrained_model, lr_inner=0.01, lr_meta=0.01, num_inner_steps=15)
+    trainer = MAMLTrainer(pretrained_model, lr_inner=0.01, lr_meta=0.001, num_inner_steps=30)
     monitor_and_predict(
         trainer,
         username="kimjaehoug",
-        target_count=10,
+        target_count=64,
         check_interval=60,  # 🔁 내부적으로 1분마다 반복
         future_steps=20
     )
 
 
 # bit_maml.py 파일 안에 추가
-def predict_and_store_once(username="kimjaehoug", future_steps=50):
+def predict_and_store_once(username="kimjaehoug", future_steps=15):
     pretrained_model = load_pretrained_model(
         BiLSTMTransformerHybrid,
         "rmse_pretrained.pth",
@@ -272,9 +291,9 @@ def predict_and_store_once(username="kimjaehoug", future_steps=50):
         output_dim=1,
         nhead=8,
         num_layers=2,
-        dropout=0.2
+        dropout=0.1
     )
-    trainer = MAMLTrainer(pretrained_model, lr_inner=0.001, lr_meta=0.001, num_inner_steps=15)
+    trainer = MAMLTrainer(pretrained_model, lr_inner=0.01, lr_meta=0.001, num_inner_steps=30)
 
     # 최신 데이터 로드 (예측에 사용할 recent_data 100개)
     collection_ref = db.collection(f"users/{username}/glulog")
@@ -302,7 +321,7 @@ def predict_and_store_once(username="kimjaehoug", future_steps=50):
 
     recent_data = sorted(recent_data, key=lambda x: x[0])
 
-    if len(recent_data) >= 10:
+    if len(recent_data) >= 64:
         future_predictions = predict_future(trainer, recent_data, future_steps)
         save_predictions(username, future_predictions)
         print(f"[predict_and_store_once] ✅ 예측 완료 및 저장됨 ({len(future_predictions)}개)")
@@ -320,9 +339,9 @@ if __name__ == "__main__":
         output_dim=1,
         nhead=8,
         num_layers=2,
-        dropout=0.2
+        dropout=0.1
     )
-    trainer = MAMLTrainer(pretrained_model, lr_inner=0.001, lr_meta=0.001, num_inner_steps=15)
+    trainer = MAMLTrainer(pretrained_model, lr_inner=0.01, lr_meta=0.001, num_inner_steps=30)
 
     # 사용자 이름 설정
     username = "kimjaehoug"
@@ -331,7 +350,7 @@ if __name__ == "__main__":
     monitor_and_predict(
         trainer,
         username=username,
-        target_count=100,
+        target_count=64,
         check_interval=60,  # 1분
         future_steps=200  # 100개 시점
     )

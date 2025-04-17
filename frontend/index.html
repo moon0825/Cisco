@@ -220,7 +220,7 @@
     <script>
         // --- 설정 ---
         const patientId = 'kimjaehoug'; // 환자 ID 설정 (실제 환경에서는 로그인 통해 받아와야 함)
-        const backendUrl = 'https://cisco-ejsn.vercel.app'; // 배포된 백엔드 URL
+        const backendUrl = 'http://10.55.56.37:5371'; // 배포된 백엔드 URL
         let glucoseChartInstance = null;
         let currentPatientData = {};
         let currentChartHours = 3; // 차트 기본 시간 범위
@@ -244,7 +244,7 @@
         const recentLogsContainerEl = document.getElementById('recentLogsContainer');
         const allLogsContainerEl = document.getElementById('allLogsContainer');
         const logDateFilterEl = document.getElementById('logDateFilter');
-        // const stateLogsContainerEl = document.getElementById('stateLogsContainer'); // 상태 기록 제거
+        const stateLogsContainerEl = document.getElementById('stateLogsContainer'); // 상태 기록 제거
 
         const homeContent = document.getElementById('homeContent');
         const chartContent = document.getElementById('chartContent');
@@ -284,17 +284,23 @@
         }
 
         function updatePredictionUI(predictionData) {
-            if (!predictionData || !predictionData.current || !predictionData.prediction_30min || !predictionData.prediction_60min) {
-                console.warn("유효하지 않은 예측 데이터", predictionData);
-                currentGlucoseValueEl.innerText = 'N/A'; predictionValue30El.innerText = 'N/A'; predictionValue60El.innerText = 'N/A';
-                lastUpdateTimeEl.innerText = '업데이트: -';
-                [currentGlucoseTrendEl, predictionTrend30El, predictionTrend60El].forEach(el => {
-                    el.innerHTML = '<i class="bi bi-question-circle"></i>'; el.className = 'glucose-trend'; });
-                glucoseProgressBarEl.style.width = '0%';
-                glucoseProgressBarEl.className = 'progress-bar';
-                return;
-            }
-            const sortedPredictions = predictions
+    if (!Array.isArray(predictionData) || predictionData.length < 3) {
+        console.warn("유효하지 않은 예측 데이터", predictionData);
+        currentGlucoseValueEl.innerText = 'N/A';
+        predictionValue30El.innerText = 'N/A';
+        predictionValue60El.innerText = 'N/A';
+        lastUpdateTimeEl.innerText = '업데이트: -';
+        [currentGlucoseTrendEl, predictionTrend30El, predictionTrend60El].forEach(el => {
+            el.innerHTML = '<i class="bi bi-question-circle"></i>';
+            el.className = 'glucose-trend';
+        });
+        glucoseProgressBarEl.style.width = '0%';
+        glucoseProgressBarEl.className = 'progress-bar';
+        return;
+    }
+
+    // 정렬된 예측값 3개 추출
+    const sortedPredictions = predictionData
         .map(p => ({
             timestamp: new Date(p.timestamp),
             value: parseFloat(p.value)
@@ -305,108 +311,65 @@
     const pred30Val = sortedPredictions[1].value;
     const pred60Val = sortedPredictions[2].value;
 
-            currentGlucoseValueEl.innerText = currentVal.toFixed(2);
-            predictionValue30El.innerText = pred30Val.toFixed(2);
-predictionValue60El.innerText = pred60Val.toFixed(2);
+    currentGlucoseValueEl.innerText = currentVal.toFixed(2);
+    predictionValue30El.innerText = pred30Val.toFixed(2);
+    predictionValue60El.innerText = pred60Val.toFixed(2);
 
-            if (sortedPredictions[0].timestamp) {
-                lastUpdateTimeEl.innerText = `업데이트: ${moment(sortedPredictions[0].timestamp).tz("Asia/Seoul").fromNow()
-}`;
-            }
+    if (sortedPredictions[0].timestamp) {
+        lastUpdateTimeEl.innerText = `업데이트: ${moment(sortedPredictions[0].timestamp).tz("Asia/Seoul").fromNow()}`;
+    }
 
-            const trendInfoCurrent = getTrendInfo(currentVal, null);
-            currentGlucoseTrendEl.innerHTML = `<i class="bi ${trendInfoCurrent.icon}"></i>`;
-            currentGlucoseTrendEl.className = `glucose-trend ${trendInfoCurrent.class}`;
+    const trendInfoCurrent = getTrendInfo(currentVal, null);
+    currentGlucoseTrendEl.innerHTML = `<i class="bi ${trendInfoCurrent.icon}"></i>`;
+    currentGlucoseTrendEl.className = `glucose-trend ${trendInfoCurrent.class}`;
 
-            const trendInfo30 = getTrendInfo(pred30Val, currentVal);
-            predictionTrend30El.innerHTML = `<i class="bi ${trendInfo30.icon}"></i> <span class="math-inline">\{trendInfo30\.change \>\= 0 ? '\+' \: ''\}</span>{trendInfo30.change}`;
-            predictionTrend30El.className = `glucose-trend ${trendInfo30.class}`;
+    const trendInfo30 = getTrendInfo(pred30Val, currentVal);
+    predictionTrend30El.innerHTML = `<i class="bi ${trendInfo30.icon}"></i> ${trendInfo30.change >= 0 ? '+' : ''}${trendInfo30.change}`;
+    predictionTrend30El.className = `glucose-trend ${trendInfo30.class}`;
 
-            const trendInfo60 = getTrendInfo(pred60Val, pred30Val);
-            predictionTrend60El.innerHTML = `<i class="bi ${trendInfo60.icon}"></i> <span class="math-inline">\{trendInfo60\.change \>\= 0 ? '\+' \: ''\}</span>{trendInfo60.change}`;
-            predictionTrend60El.className = `glucose-trend ${trendInfo60.class}`;
+    const trendInfo60 = getTrendInfo(pred60Val, pred30Val);
+    predictionTrend60El.innerHTML = `<i class="bi ${trendInfo60.icon}"></i> ${trendInfo60.change >= 0 ? '+' : ''}${trendInfo60.change}`;
+    predictionTrend60El.className = `glucose-trend ${trendInfo60.class}`;
 
-            // 프로그레스 바 업데이트
-            if (currentPatientData.target_glucose_range && currentVal != null) {
-                const minTarget = currentPatientData.target_glucose_range.min;
-                const maxTarget = currentPatientData.target_glucose_range.max;
-                let progressPercent = ((currentVal - 40) / (260)) * 100; // 40~300 범위 기준
-                progressPercent = Math.max(0, Math.min(100, progressPercent));
-                glucoseProgressBarEl.style.width = `${progressPercent}%`;
-                glucoseProgressBarEl.className = 'progress-bar'; // Reset classes
-                if (currentVal < minTarget) glucoseProgressBarEl.classList.add('bg-warning');
-                else if (currentVal > maxTarget) glucoseProgressBarEl.classList.add('bg-danger');
-                else glucoseProgressBarEl.classList.add('bg-success');
-            } else {
-                 glucoseProgressBarEl.style.width = '0%';
-                 glucoseProgressBarEl.className = 'progress-bar';
-            }
-        }
-
-        function updateAlertUI(alerts) {
-            alertCardContainerEl.innerHTML = '';
-            if (alerts && alerts.length > 0) {
-                const latestAlert = alerts[0];
-                const alertCard = alertCardTemplateEl.cloneNode(true);
-                alertCard.style.display = 'block'; alertCard.id = `alert-${latestAlert.id}`;
-                const titleText = alertCard.querySelector('.alertTitleText');
-                const messageText = alertCard.querySelector('.alertMessageText');
-                const alertIcon = alertCard.querySelectorAll('.alert-icon');
-                alertCard.classList.remove('alert-warning', 'alert-danger', 'alert-high', 'alert-secondary');
-                let titlePrefix = '', iconClass = '';
-                if (latestAlert.type === 'low') { alertCard.classList.add('alert-warning'); titlePrefix = '저혈당 위험'; iconClass = 'bi-exclamation-triangle-fill'; }
-                else if (latestAlert.type === 'high') { alertCard.classList.add('alert-high'); titlePrefix = '고혈당 위험'; iconClass = 'bi-exclamation-octagon-fill'; }
-                else { alertCard.classList.add('alert-secondary'); titlePrefix = '알림'; iconClass = 'bi-info-circle-fill'; }
-                titleText.innerText = titlePrefix;
-                messageText.innerText = latestAlert.message || '상세 정보 없음';
-                alertIcon.forEach(icon => icon.className = `alert-icon bi ${iconClass}`);
-                const ackButton = alertCard.querySelector('.ack-button');
-                ackButton.onclick = () => acknowledgeAlert(latestAlert.id);
-                alertCardContainerEl.appendChild(alertCard);
-            }
-        }
-
-        async function acknowledgeAlert(alertId) {
-            console.log(`알림 확인 시도: ${alertId}`);
-            showLoading('알림 확인 중...');
-            try {
-                const response = await fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}/alerts/${alertId}`, {
-                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ acknowledged: true, status: 'acknowledged' }) });
-                if (response.ok || response.status === 304) {
-                    console.log(`알림 확인 완료: ${alertId}`);
-                    const alertCard = document.getElementById(`alert-${alertId}`);
-                    if (alertCard) {
-                        alertCard.style.opacity = '0.5';
-                        const button = alertCard.querySelector('.ack-button');
-                        if(button) { button.disabled = true; button.innerText = '확인됨'; }
-                        setTimeout(() => alertCard.remove(), 1500); // 잠시 후 제거
-                    }
-                } else { const errorResult = await response.json(); alert(`알림 확인 실패: ${errorResult.error}`); }
-            } catch (error) { console.error('알림 확인 오류:', error); alert('알림 확인 중 오류 발생');
-            } finally { hideLoading(); }
-        }
+    // 프로그레스 바 처리
+    if (currentPatientData.target_glucose_range && currentVal != null) {
+        const minTarget = currentPatientData.target_glucose_range.min;
+        const maxTarget = currentPatientData.target_glucose_range.max;
+        let progressPercent = ((currentVal - 40) / 260) * 100;
+        progressPercent = Math.max(0, Math.min(100, progressPercent));
+        glucoseProgressBarEl.style.width = `${progressPercent}%`;
+        glucoseProgressBarEl.className = 'progress-bar';
+        if (currentVal < minTarget) glucoseProgressBarEl.classList.add('bg-warning');
+        else if (currentVal > maxTarget) glucoseProgressBarEl.classList.add('bg-danger');
+        else glucoseProgressBarEl.classList.add('bg-success');
+    } else {
+        glucoseProgressBarEl.style.width = '0%';
+        glucoseProgressBarEl.className = 'progress-bar';
+    }
+}
 
         function dismissAlert(closeButton) { closeButton.closest('.alert-card')?.remove(); }
 
         function updateRecentLogsUI(readings) {
-            recentLogsContainerEl.innerHTML = '';
-            console.log("ddddd",readings);
-            if (!readings || readings.length === 0) {
-                recentLogsContainerEl.innerHTML = '<div class="log-item text-center text-muted p-3">최근 기록 없음</div>'; return; }
-            const recentReadings = readings.slice().reverse().slice(0, 3); // 최신 3개
-            recentReadings.forEach(reading => {
-                const logDiv = document.createElement('div');
-                logDiv.className = 'log-item d-flex justify-content-between align-items-center';
-                logDiv.innerHTML = `
-                    <div>
-                        <div class="log-time">${moment(reading.timestamp).tz("Asia/Seoul").format('HH:mm')}</div>
-                        <div class="log-value">${reading.glucose.toFixed(2)} mg/dL</div>
-                    </div>
-                    <span class="log-source">${reading.source || 'Unknown'}</span>`;
-                recentLogsContainerEl.appendChild(logDiv);
-            });
-        }
+    recentLogsContainerEl.innerHTML = '';
+    if (!readings || readings.length === 0) {
+        recentLogsContainerEl.innerHTML = '<div class="log-item text-center text-muted p-3">최근 기록 없음</div>';
+        return;
+    }
+
+    const recentReadings = readings.slice().reverse().slice(0, 3); // 최신 3개
+    recentReadings.forEach(reading => {
+        const logDiv = document.createElement('div');
+        logDiv.className = 'log-item d-flex justify-content-between align-items-center';
+        logDiv.innerHTML = `
+            <div>
+                <div class="log-time">${moment(reading.timestamp).tz("Asia/Seoul").format('HH:mm')}</div>
+                <div class="log-value">${reading.glucose.toFixed(2)} mg/dL</div>
+            </div>
+            <span class="log-source">${reading.source || 'CGM'}</span>`;
+        recentLogsContainerEl.appendChild(logDiv);
+    });
+}
 
         function updateAllLogsUI(readings) {
             allLogsContainerEl.innerHTML = '';
@@ -468,7 +431,7 @@ predictionValue60El.innerText = pred60Val.toFixed(2);
             }
 
             const labels = readings.map(r => r.timestamp); // ISO 문자열 사용
-            const dataPoints = readings.map(r => r.value); // value 필드 사용
+            const dataPoints = readings.map(r => r.glucose); // value 필드 사용
 
             const values = dataPoints.filter(v => v != null);
             const minVal = values.length ? Math.min(...values) : null;
@@ -613,67 +576,113 @@ predictionValue60El.innerText = pred60Val.toFixed(2);
 
         // --- 데이터 로딩 함수 ---
         async function fetchData(hours = 3) {
-            console.log(`fetchData 호출 (hours: ${hours})`);
-            showLoading('데이터 로딩 중...');
-            let predictionData = null, alertData = null, glucoseData = null, patientData = null;
-            let fetchError = null;
+    console.log(`📥 fetchData 호출 (hours: ${hours})`);
+    showLoading('데이터 로딩 중...');
 
-            try {
-                const endpoints = [
-                    // ↓↓↓↓↓↓ 여기 URL 부분을 수정했습니다 ↓↓↓↓↓↓
-                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}`)
-                        .catch(e => {console.error('환자 fetch 오류:', e); return {error:e, ok:false, name:'patient'};}),
-                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}/predictions`)
-                        .catch(e => {console.error('예측 fetch 오류:', e); return {error:e, ok:false, name:'prediction'};}),
-                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}/alerts?active_only=true`)
-                        .catch(e => {console.error('알림 fetch 오류:', e); return {error:e, ok:false, name:'alert'};}),
-                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}/glucose?hours=${hours}`)
-                        .catch(e => {console.error('혈당 fetch 오류:', e); return {error:e, ok:false, name:'glucose'};})
-                    // ↑↑↑↑↑↑ 여기 URL 부분을 수정했습니다 ↑↑↑↑↑↑
-                    // 상태(states) 엔드포인트 호출은 제거된 상태 유지
-                ];
-                const responses = await Promise.all(endpoints);
+    let predictionData = null;
+    let alertData = null;
+    let glucoseData = null;
+    let patientData = null;
+    let fetchError = null;
 
-                // 각 응답 처리
-                if (responses[0] && responses[0].ok) patientData = await responses[0].json(); else console.error("환자 데이터 로드 실패", responses[0]);
-                if (responses[1] && responses[1].ok) predictionData = await responses[1].json(); else console.error("예측 데이터 로드 실패", responses[1]);
-                if (responses[2] && responses[2].ok) alertData = await responses[2].json(); else console.error("알림 데이터 로드 실패", responses[2]);
-                if (responses[3] && responses[3].ok) glucoseData = await responses[3].json(); else console.error("혈당 데이터 로드 실패", responses[3]);
+    try {
+        const responses = await Promise.all([
+            fetch(`${backendUrl}/api/patients/${patientId}`).catch(err => {
+                console.error('❌ 환자 데이터 오류:', err);
+                return null;
+            }),
+            fetch(`${backendUrl}/api/patients/${patientId}/predictions`).catch(err => {
+                console.error('❌ 예측 데이터 오류:', err);
+                return null;
+            }),
+            fetch(`${backendUrl}/api/patients/${patientId}/alerts?active_only=true`).catch(err => {
+                console.error('❌ 알림 데이터 오류:', err);
+                return null;
+            }),
+            fetch(`${backendUrl}/api/patients/${patientId}/glucose`).catch(err => {
+                console.error('❌ 혈당 데이터 오류:', err);
+                return null;
+            }),
+            fetch(`${backendUrl}/api/patients/${patientId}/states`).catch(err => {
+                console.error('❌ 상태 데이터 오류:', err);
+                return null;
+            })
+        ]);
 
-                // 모든 필수 데이터 로드 실패 시 오류 처리 (단, alert는 실패해도 진행)
-                if (!patientData || !glucoseData || !predictionData) {
-                     // SeedDemoData 자동 호출 제거
-                     console.error("필수 데이터 로드 실패. 수동으로 데이터 확인 필요.");
-                     // 사용자에게 오류 메시지 표시
-                     alert('데이터 로딩에 실패했습니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요.');
-                     fetchError = new Error("필수 데이터 로드 실패");
-                }
-
-            } catch (error) {
-                fetchError = error; // 네트워크 오류 등 Promise.all 외부 오류
-            } finally {
-                 // 성공/실패 여부와 관계없이 로딩 숨김
-                 hideLoading();
-
-                if (fetchError) {
-                    console.error('fetchData 최종 오류:', fetchError);
-                    // 오류 시 UI 처리
-                    currentGlucoseValueEl.innerText = '오류'; predictionValue30El.innerText = '오류'; predictionValue60El.innerText = '오류';
-                    recentLogsContainerEl.innerHTML = '<div class="log-item text-center text-danger p-3">데이터 로드 실패</div>';
-                    if (glucoseChartInstance) { glucoseChartInstance.destroy(); glucoseChartInstance = null; }
-                } else {
-                    // 성공 시 UI 업데이트
-                    if (patientData) updatePatientInfoUI(patientData);
-                    if (predictionData) updatePredictionUI(predictionData); // 이제 predictionData 객체 전체를 넘김
-                    if (alertData) updateAlertUI(alertData.alerts);
-                    if (glucoseData) {
-                         updateRecentLogsUI(glucoseData.readings);
-                         updateChart(glucoseData.readings, hours); // 차트 업데이트 호출 추가
-                    }
-                    // 상태 기록 업데이트 호출 제거
-                }
-            }
+        // 응답 처리
+        if (responses[0] && responses[0].ok) {
+            patientData = await responses[0].json();
+        } else {
+            console.error("⚠️ 환자 데이터 로드 실패", responses[0]);
         }
+
+        if (responses[1] && responses[1].ok) {
+            predictionData = await responses[1].json();
+        } else {
+            console.error("⚠️ 예측 데이터 로드 실패", responses[1]);
+        }
+
+        if (responses[2] && responses[2].ok) {
+            alertData = await responses[2].json();
+        } else {
+            console.error("⚠️ 알림 데이터 로드 실패", responses[2]);
+        }
+
+        if (responses[3] && responses[3].ok) {
+            glucoseData = await responses[3].json();
+        } else {
+            console.error("⚠️ 혈당 데이터 로드 실패", responses[3]);
+        }
+        if (responses[4] && responses[4].ok) {
+    const stateData = await responses[4].json();
+    updateStateLogsUI(stateData.states || stateData);
+}
+
+        // 필수 데이터 없으면 실패 처리
+        if (!patientData || !glucoseData || !predictionData) {
+            alert('데이터 로딩에 실패했습니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요.');
+            fetchError = new Error("필수 데이터 로드 실패");
+        }
+
+    } catch (error) {
+        fetchError = error;
+        console.error("❌ fetchData 예외:", error);
+    } finally {
+        hideLoading();
+
+        if (fetchError) {
+            currentGlucoseValueEl.innerText = '오류';
+            predictionValue30El.innerText = '오류';
+            predictionValue60El.innerText = '오류';
+            recentLogsContainerEl.innerHTML = '<div class="log-item text-center text-danger p-3">데이터 로드 실패</div>';
+            if (glucoseChartInstance) {
+                glucoseChartInstance.destroy();
+                glucoseChartInstance = null;
+            }
+            return;
+        }
+
+        // --- 성공 시 UI 업데이트 ---
+        if (patientData) updatePatientInfoUI(patientData);
+
+        if (predictionData?.predictions) {
+            updatePredictionUI(predictionData.predictions);  // 배열로 넘김
+        }
+
+        if (alertData?.alerts) {
+            updateAlertUI(alertData.alerts);
+        }
+
+        if (glucoseData) {
+            // readings가 있으면 readings 사용, 없으면 자체 배열로 간주
+            const readings = Array.isArray(glucoseData.readings) ? glucoseData.readings : glucoseData;
+
+            console.log("✅ 로딩된 혈당 기록 수:", readings.length);
+            updateRecentLogsUI(readings);
+            updateChart(readings, hours);
+        }
+    }
+}
 
         async function fetchAllLogs(dateStr) {
     showLoading('전체 기록 로딩 중...');
@@ -685,10 +694,10 @@ predictionValue60El.innerText = pred60Val.toFixed(2);
 
             // 날짜별 필터
             const filteredReadings = readings.filter(r => {
-    if (!r.timestamp) return false;
-    const dayStr = moment(r.timestamp).tz("Asia/Seoul").format("YYYY-MM-DD");
-    return dayStr === dateStr;
-});
+                if (!r.timestamp) return false;
+                const dayStr = moment(r.timestamp).tz("Asia/Seoul").format("YYYY-MM-DD");
+                return dayStr === dateStr;
+            });
 
             // 1. 전체 기록 UI
             updateAllLogsUI(filteredReadings);
