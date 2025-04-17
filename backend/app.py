@@ -43,7 +43,7 @@ except Exception as e:
 app = Flask(__name__)
 # CORS 설정: 프론트엔드 Vercel 주소를 명시적으로 허용하는 것이 좋음
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://cisco-git-main-kihoon-moons-projects.vercel.app") # 기본값 설정
-CORS(app, origins=[FRONTEND_URL, "http://localhost:5000","*"], supports_credentials=True) # 로컬 및 배포 주소 허용
+CORS(app, origins=[os.environ.get("FRONTEND_URL", "*")], supports_credentials=True) # 모든 출처 허용 (개발용) 또는 환경변수 사용
 api = Api(app)
 
 # --- Webex 통합 설정 (기존 코드 유지) ---
