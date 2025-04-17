@@ -19,9 +19,6 @@ from google.api_core import exceptions as google_exceptions
 # --- Firebase 초기화 ---
 SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "./ciscoglucose-firebase-adminsdk-fbsvc-3864a20e01.json")
 db = None
-# --- Firebase 초기화 ---
-SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "./ciscoglucose-firebase-adminsdk-fbsvc-3864a20e01.json")
-db = None
 
 def initialize_firebase():
     global db
