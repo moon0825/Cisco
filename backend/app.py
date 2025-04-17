@@ -14,7 +14,7 @@ from firebase_admin import credentials, firestore
 # from google.api_core import exceptions as google_exceptions
 
 # --- Firebase 초기화 ---
-SERVICE_ACCOUNT_KEY_PATH = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+SERVICE_ACCOUNT_KEY_PATH = os.environ.get('ciscoglucose-firebase-adminsdk-fbsvc-e1faa4637f')
 db = None
 try:
     # 서비스 계정 키 경로가 유효한지 확인
@@ -98,7 +98,7 @@ class PatientResource(Resource):
     def get(self, patient_id):
         if not db: return {"error": "Database service unavailable"}, 503
         try:
-            patient_ref = db.collection('patients').document(patient_id)
+            patient_ref = db.collection('users').document(patient_id)
             doc = patient_ref.get()
             if doc.exists:
                 return doc.to_dict(), 200
@@ -114,30 +114,24 @@ class GlucoseResource(Resource):
     def get(self, patient_id):
         if not db: return {"error": "Database service unavailable"}, 503
         try:
-            hours = request.args.get('hours', default=24, type=int)
-            # Firestore에서 시간 범위 쿼리는 복잡하므로, 최근 N개 조회로 단순화
-            limit = min(hours * 12, 1000) # 5분 간격 가정, 최대 1000개 제한
-
-            readings_query = db.collection('glucoseReadings') \
-                                .where('patientId', '==', patient_id) \
-                                .order_by('timestamp', direction=firestore.Query.DESCENDING) \
-                                .limit(limit)
+            # Firestore 쿼리: users/kimjaehoug/glulog 경로에서 모든 데이터 조회
+            readings_query = db.collection('users').document('kimjaehoug').collection('glulog') \
+                              .order_by('timestamp', direction=firestore.Query.DESCENDING)
 
             docs = readings_query.stream()
             readings_list = []
             for doc in docs:
                 data = doc.to_dict()
-                # Firestore 타임스탬프를 ISO 문자열로 변환하여 프론트엔드 호환성 확보
-                data['timestamp'] = firestore_timestamp_to_iso(data.get('timestamp'))
+                # Firestore 타임스탬프를 그대로 문자열로 반환 (프론트엔드 호환성)
+                data['timestamp'] = data.get('timestamp', '')
                 readings_list.append(data)
 
-            readings_list.reverse() # 시간 순서대로 정렬
+            readings_list.reverse()  # 시간 순서대로 정렬 (오래된 것 → 최신)
             return {"readings": readings_list}, 200
         except Exception as e:
             print(f"Error getting glucose readings for {patient_id}: {e}")
-            # Firestore 인덱스 오류 메시지 확인: e.details() 등에 정보 포함될 수 있음
             if "index" in str(e).lower():
-                 return {"error": "Database query requires an index. Please create it in the Firestore console."}, 500
+                return {"error": "Database query requires an index. Please create it in the Firestore console."}, 500
             return {"error": "Internal server error fetching glucose data"}, 500
 
     def post(self, patient_id):
@@ -652,7 +646,7 @@ if __name__ == '__main__':
     # print("Demo data initialized.")
 
     # 서버 실행
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5371))
     print(f"Starting server on port {port}...")
     # debug=True는 Vercel 배포 시에는 False로 설정하는 것이 좋음
     app.run(host='0.0.0.0', port=port, debug=False if os.environ.get('VERCEL') else True)
