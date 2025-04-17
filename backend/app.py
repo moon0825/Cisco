@@ -553,6 +553,137 @@ class SeedDemoData(Resource):
             print(f"!!! 데모 데이터 시딩 중 오류: {e} !!!")
             return {"error": f"Failed to seed demo data: {str(e)}"}, 500
 
+# --- *** 의료진 대시보드용 신규 API 리소스 *** ---
+
+class DoctorPatientList(Resource):
+    """ 특정 의사에게 할당된 환자 목록 조회 """
+    def get(self, doctor_id):
+        if not db: return {"error": "DB 미연결"}, 503
+        print(f"의사({doctor_id})의 환자 목록 조회 시도")
+        patients_list = []
+        try:
+            # 'patients' 컬렉션에서 doctor_id 필드가 일치하는 문서들을 조회
+            # (Firestore에서는 컬렉션 그룹 쿼리나 별도 매핑 구조가 더 효율적일 수 있음)
+            # 여기서는 patients 컬렉션에 doctor_id가 있다고 가정
+            patients_query = db.collection(PATIENTS_COLLECTION) \
+                               .where('doctor_id', '==', doctor_id) \
+                               .stream()
+            
+            # TODO: 환자 상태 요약을 위해 추가 쿼리 필요 (여기서는 기본 정보만 반환)
+            for doc in patients_query:
+                patient_data = doc.to_dict()
+                patient_data['id'] = doc.id # 환자 ID 추가
+                # 프론트엔드가 기대하는 추가 정보 (임시)
+                patient_data['status'] = random.choice(['normal', 'warning', 'danger']) # 임시 상태
+                patient_data['lastGlucose'] = random.randint(60, 180) # 임시 혈당
+                patient_data['trend'] = random.choice(['up', 'down', 'stable']) # 임시 트렌드
+                patient_data['lastUpdate'] = f"{random.randint(1, 59)}분 전" # 임시 시간
+                patients_list.append(patient_data)
+            
+            print(f"의사({doctor_id}) 환자 {len(patients_list)}명 조회 완료")
+            return {"patients": patients_list}, 200
+        except Exception as e:
+            print(f"의사({doctor_id}) 환자 목록 조회 오류: {e}")
+            return {"error": "서버 오류 (환자 목록 조회)"}, 500
+
+
+class DoctorAlertList(Resource):
+    """ 특정 의사의 환자들에게 발생한 알림 목록 조회 """
+    def get(self):
+        if not db: return {"error": "DB 미연결"}, 503
+        doctor_id = request.args.get('doctor_id')
+        limit = request.args.get('limit', default=20, type=int) # 기본 20개
+        active_only = request.args.get('active_only', default='true', type=str).lower() == 'true'
+        
+        if not doctor_id: return {"error": "doctor_id 파라미터 필요"}, 400
+        print(f"의사({doctor_id}) 알림 목록 조회 시도 (limit={limit}, active_only={active_only})")
+        
+        alerts_list = []
+        try:
+            # 1. 해당 의사에게 속한 환자 ID 목록 조회
+            patient_ids = []
+            patients_query = db.collection(PATIENTS_COLLECTION) \
+                               .where('doctor_id', '==', doctor_id) \
+                               .stream()
+            for doc in patients_query:
+                patient_ids.append(doc.id)
+                
+            if not patient_ids:
+                print(f"의사({doctor_id})에게 할당된 환자 없음")
+                return {"alerts": []}, 200 # 환자가 없으면 알림도 없음
+
+            # 2. 환자 ID 목록을 사용하여 알림 조회 (IN 쿼리 - 최대 30개 ID 지원)
+            #    환자가 30명 초과 시 여러 번 쿼리 필요 (여기서는 단순화)
+            if len(patient_ids) > 30:
+                 print(f"경고: 환자 수가 30명 초과({len(patient_ids)}), 일부 알림만 조회될 수 있음.")
+                 patient_ids = patient_ids[:30] # 임시로 30명 제한
+
+            alerts_query = db.collection(ALERTS_COLLECTION) \
+                             .where('patientId', 'in', patient_ids)
+            
+            if active_only:
+                alerts_query = alerts_query.where('status', '==', 'active')
+
+            alerts_query = alerts_query.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(limit)
+            docs = alerts_query.stream()
+            
+            # 환자 이름 정보 미리 로드 (효율성 위해)
+            patient_names = {pid: db.collection(PATIENTS_COLLECTION).document(pid).get().to_dict().get('name', pid) for pid in patient_ids}
+
+            for doc in docs:
+                data = doc.to_dict()
+                data['id'] = doc.id
+                data['patientName'] = patient_names.get(data.get('patientId'), data.get('patientId')) # 환자 이름 추가
+                data['timestamp'] = firestore_timestamp_to_iso(data.get('timestamp'))
+                data['current_reading_timestamp'] = firestore_timestamp_to_iso(data.get('current_reading_timestamp'))
+                alerts_list.append(data)
+            
+            print(f"의사({doctor_id}) 알림 {len(alerts_list)}개 조회 완료")
+            return {"alerts": alerts_list}, 200
+        except google_exceptions.FailedPrecondition as e:
+             if "index" in str(e).lower(): print(f"!!! Firestore 인덱스 필요: {e} !!!"); return {"error": "DB 쿼리 인덱스 필요"}, 400
+             else: raise e
+        except Exception as e:
+            print(f"의사({doctor_id}) 알림 목록 조회 오류: {e}")
+            return {"error": "서버 오류 (알림 목록 조회)"}, 500
+
+
+class UserWebexStatus(Resource):
+     """ 특정 사용자의 Webex 토큰 상태 확인 """
+     def get(self, user_id):
+         if not db: return {"error": "DB 미연결"}, 503
+         print(f"사용자({user_id}) Webex 상태 확인 시도")
+         try:
+            token_data = get_tokens(user_id)
+            is_connected = False
+            user_email = None # TODO: 사용자 이메일 정보 가져오기 (예: patients 컬렉션)
+
+            if token_data:
+                expires_at = token_data.get('expires_at')
+                if expires_at and isinstance(expires_at, datetime):
+                     if expires_at.tzinfo is None: expires_at = expires_at.replace(tzinfo=timezone.utc)
+                     if expires_at > datetime.now(timezone.utc):
+                         is_connected = True
+                         # 연결된 경우 사용자 이메일 정보 가져오기 시도
+                         user_snap = db.collection(PATIENTS_COLLECTION).document(user_id).get() # patients에 의사 정보도 있다고 가정
+                         if user_snap.exists: user_email = user_snap.to_dict().get('email')
+                elif token_data.get('access_token'): # 만료 정보 없어도 토큰 있으면 일단 연결된 것으로 간주
+                     is_connected = True
+                     user_snap = db.collection(PATIENTS_COLLECTION).document(user_id).get()
+                     if user_snap.exists: user_email = user_snap.to_dict().get('email')
+
+            print(f"사용자({user_id}) Webex 상태: {'연결됨' if is_connected else '연결안됨'}")
+            return {"connected": is_connected, "email": user_email}, 200
+         except Exception as e:
+            print(f"사용자({user_id}) Webex 상태 확인 오류: {e}")
+            return {"error": "서버 오류 (Webex 상태 확인)"}, 500
+
+
+# --- API 라우트 등록 (신규 추가) ---
+api.add_resource(DoctorPatientList, '/api/doctors/<string:doctor_id>/patients')
+api.add_resource(DoctorAlertList, '/api/alerts') # doctor_id는 쿼리 파라미터로 받음
+api.add_resource(UserWebexStatus, '/api/users/<string:user_id>/webex_status')
+# TODO: /summary, /sessions 등 필요한 다른 대시보드 API 라우트 추가
 # --- API 라우트 등록 ---
 api.add_resource(PatientResource, '/api/patients/<string:patient_id>')
 api.add_resource(GlucoseResource, '/api/patients/<string:patient_id>/glucose')
