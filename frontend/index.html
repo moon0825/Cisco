@@ -409,7 +409,7 @@
                 <div class="log-time">${moment(state.time).tz("Asia/Seoul").format('YYYY-MM-DD HH:mm')}</div>
                 <div class="log-value">${label}</div>
             </div>
-            <span class="log-source">${state.meal || '상세 없음'}</span>
+            <span class="log-source">${state.mealStr || '상세 없음'}</span>
         `;
         stateLogsContainerEl.appendChild(logDiv);
     });

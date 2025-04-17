@@ -2,11 +2,12 @@
 from threading import Thread
 
 import pytz
-from flask import Flask, request, jsonify, send_from_directory  # send_from_directory 제거
+from flask import Flask, request, jsonify, send_from_directory, url_for, session  # send_from_directory 제거
 from flask_restful import Api, Resource
 from flask_cors import CORS
 import os
 import json
+import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
 from datetime import datetime, timedelta, timezone
@@ -84,7 +85,13 @@ app = Flask(__name__,static_folder=None)
 FRONTEND_URL = os.environ.get("FRONTEND_URL","https://127.0.0.1:5371") # 기본값 설정
 CORS(app, origins=[FRONTEND_URL, "http://localhost:5000","*"], supports_credentials=True) # 로컬 및 배포 주소 허용
 api = Api(app)
-
+# --- Webex OAuth 설정 ---
+WEBEX_CLIENT_ID = "Cabee5256123b2288ac0366718a921391107566503d3e8b10cfd2d1b337f87534"
+WEBEX_CLIENT_SECRET = "e630000f097834614427f412baf32dd398d143fd81b93bf77d35435d25c91d23"
+WEBEX_REDIRECT_URI = "http://127.0.0.1:5371/api/webex/callback"
+WEBEX_AUTHORIZE_URL = "https://webexapis.com/v1/authorize"
+WEBEX_TOKEN_URL = "https://webexapis.com/v1/access_token"
+WEBEX_SCOPES = os.environ.get("WEBEX_SCOPES", "spark-admin:messages_write meeting:schedules_write meeting:schedules_read spark:people_read spark:rooms_write spark:teams_write spark:team_memberships_write" )
 # --- Webex 통합 설정 (기존 코드 유지) ---
 try:
     from webex_integration import WebexAPI, MedicalWebexIntegration
@@ -149,7 +156,56 @@ def firestore_timestamp_to_iso(timestamp):
         print(f"[에러] timestamp 변환 실패: {timestamp} → {e}")
         return None
 
+PATIENTS_COLLECTION = 'patients'
+GLUCOSE_COLLECTION = 'glucoseReadings'
+PREDICTIONS_COLLECTION = 'predictions'
+ALERTS_COLLECTION = 'alerts'
+TOKENS_COLLECTION = 'webex_tokens'
+DOCTORS_COLLECTION = 'doctors' # 의사 정보용 (선택적
+
 # --- API 리소스 정의 (Firestore 사용) ---
+# --- Webex Token 관리 함수 (Firestore 사용) ---
+def store_tokens(user_id, access_token, refresh_token, expires_in):
+    if not db: return False
+    try:
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in) - 300) # 5분 여유
+        token_ref = db.collection(TOKENS_COLLECTION).document(user_id)
+        token_ref.set({
+            'user_id': user_id, 'access_token': access_token,
+            'refresh_token': refresh_token, 'expires_at': expires_at
+        }, merge=True)
+        print(f"토큰 저장 완료: 사용자={user_id}")
+        return True
+    except Exception as e: print(f"!!! 토큰 저장 실패 ({user_id}): {e} !!!"); return False
+
+def get_tokens(user_id):
+    if not db: return None
+    try:
+        doc = db.collection(TOKENS_COLLECTION).document(user_id).get()
+        return doc.to_dict() if doc.exists else None
+    except Exception as e: print(f"!!! 토큰 가져오기 실패 ({user_id}): {e} !!!"); return None
+
+def refresh_tokens(user_id, refresh_token):
+    if not db or not all([WEBEX_CLIENT_ID, WEBEX_CLIENT_SECRET]): return None
+    if not refresh_token: print(f"!!! 토큰 갱신 불가: Refresh Token 없음 ({user_id}) !!!"); return None
+
+    print(f"Webex 토큰 갱신 시도: 사용자={user_id}")
+    payload = { 'grant_type': 'refresh_token', 'client_id': WEBEX_CLIENT_ID,
+                'client_secret': WEBEX_CLIENT_SECRET, 'refresh_token': refresh_token }
+    try:
+        response = requests.post(WEBEX_TOKEN_URL, data=payload)
+        response.raise_for_status()
+        data = response.json()
+        print(f"토큰 갱신 성공: 사용자={user_id}")
+        store_tokens(user_id, data['access_token'], data.get('refresh_token', refresh_token), data['expires_in'])
+        return data['access_token']
+    except requests.exceptions.RequestException as e:
+        print(f"!!! 토큰 갱신 API 요청 실패 ({user_id}): {e} !!!")
+        if e.response is not None and e.response.status_code in [400, 401]:
+            print("Refresh Token 만료/오류 가능성. 재인증 필요.")
+            try: db.collection(TOKENS_COLLECTION).document(user_id).delete(); print(f"갱신 실패로 사용자 {user_id} 토큰 삭제됨")
+            except: pass
+        return None
 
 class PatientResource(Resource):
     def get(self, patient_id):
@@ -359,9 +415,65 @@ class AlertResource(Resource):
 
 
 # --- Webex 통합 API 엔드포인트 (Firestore 사용) ---
+
+def get_valid_webex_token(user_id):
+    token_data = get_tokens(user_id)
+    if not token_data: return None
+
+    expires_at = token_data.get('expires_at')
+    # Firestore Timestamp -> Python datetime 변환 (타임존 인식)
+    if expires_at and hasattr(expires_at, 'replace') and not isinstance(expires_at, datetime):
+         try: expires_at = expires_at.replace(tzinfo=timezone.utc)
+         except: expires_at = None
+
+    if isinstance(expires_at, datetime) and expires_at > datetime.now(timezone.utc):
+        print(f"유효한 토큰 사용: 사용자={user_id}")
+        return token_data.get('access_token')
+    else:
+        print(f"토큰 만료 또는 시간 정보 없음, 갱신 시도: 사용자={user_id}")
+        return refresh_tokens(user_id, token_data.get('refresh_token'))
+
+def get_webex_api_client_for_user(user_id):
+    access_token = get_valid_webex_token(user_id)
+    return WebexAPI(access_token=access_token) if access_token else None
 class WebexEmergencyConnect(Resource):
     def post(self):
-        return 500
+        if not db: return {"error": "DB 미연결"}, 503
+        data = request.get_json();
+        if not data or 'patient_id' not in data: return {"error": "patient_id 필수"}, 400
+        patient_id = data.get('patient_id')
+        requesting_user_id = data.get('requesting_user_id', 'doctor1') # 요청자 ID (의사)
+
+        webex_api_client = get_webex_api_client_for_user(requesting_user_id)
+        if not webex_api_client:
+            auth_url = url_for('webex_auth_initiate', user_id=requesting_user_id, _external=True) if 'webex_auth_initiate' in app.view_functions else None
+            return {"error": "Webex 인증 필요", "reauth_url": auth_url}, 401
+
+        medical_webex_instance = MedicalWebexIntegration(webex_api_client)
+        try:
+            patient_snap = db.collection(PATIENTS_COLLECTION).document(patient_id).get()
+            if not patient_snap.exists: return {"error": "환자 없음"}, 404
+            patient_info = patient_snap.to_dict(); doctor_id = patient_info.get("doctor_id")
+            if not doctor_id: return {"error": "담당 의사 미지정"}, 400
+            doctor_snap = db.collection(PATIENTS_COLLECTION).document(doctor_id).get() # 임시
+            if not doctor_snap.exists: return {"error": f"의사({doctor_id}) 없음"}, 404
+            doctor_info = doctor_snap.to_dict()
+            pred_snap = db.collection(PREDICTIONS_COLLECTION).document(patient_id).get()
+            current_glucose = pred_snap.to_dict().get('current',{}).get('value','N/A') if pred_snap.exists else 'N/A'
+            predicted_glucose = pred_snap.to_dict().get('prediction_30min',{}).get('value','N/A') if pred_snap.exists else 'N/A'
+
+            print(f"Webex 긴급 연결 시도 (사용자 {requesting_user_id})...")
+            session_info = medical_webex_instance.create_emergency_session(
+                patient_email=patient_info.get("email"), patient_name=patient_info.get("name"),
+                glucose_value=current_glucose, prediction=predicted_glucose,
+                doctor_email=doctor_info.get("email") )
+            print(f"Webex 긴급 연결 성공: 세션 ID={session_info.get('id')}")
+            return session_info, 201
+        except Exception as e:
+            print(f"!!! Webex 긴급 연결 실패: {e} !!!")
+            # TODO: Webex API 401 에러 처리 -> 토큰 갱신 실패 시 재인증 유도
+            return {"error": f"Webex 긴급 연결 실패: {str(e)}"}, 500
+
 
 class WebexScheduleCheckup(Resource):
      def post(self):
@@ -402,6 +514,41 @@ def serve_index():
     except Exception as e:
         print(f"!!! 오류: {e} !!!")
         return jsonify({"error": "Internal server error serving frontend"}), 500
+
+@app.route('/api/webex/auth/callback')
+def webex_auth_callback():
+    error = request.args.get('error')
+    if error: return jsonify({"error": "Webex OAuth Error", "details": error}), 400
+    code = request.args.get('code')
+    state = request.args.get('state')
+    expected_state = session.pop('webex_oauth_state', None)
+    user_id = session.pop('webex_auth_user_id', None)
+
+    if not expected_state or state != expected_state: return jsonify({"error": "Invalid OAuth state"}), 400
+    if not code or not user_id: return jsonify({"error": "Missing code or user context"}), 400
+    if not all([WEBEX_CLIENT_ID, WEBEX_CLIENT_SECRET, WEBEX_REDIRECT_URI]):
+         return jsonify({"error": "Webex OAuth 미설정"}), 500
+
+    payload = { 'grant_type': 'authorization_code', 'client_id': WEBEX_CLIENT_ID,
+                'client_secret': WEBEX_CLIENT_SECRET, 'code': code, 'redirect_uri': WEBEX_REDIRECT_URI }
+    try:
+        response = requests.post(WEBEX_TOKEN_URL, data=payload)
+        response.raise_for_status()
+        data = response.json()
+        success = store_tokens(user_id, data['access_token'], data['refresh_token'], data['expires_in'])
+        if success:
+             # TODO: 성공 후 프론트엔드 리디렉션 또는 메시지 개선
+             return jsonify({"message": f"Webex 인증 성공: 사용자={user_id}"})
+        else: return jsonify({"error": "토큰 저장 실패"}), 500
+    except requests.exceptions.RequestException as e:
+        print(f"!!! 토큰 교환 실패: {e} !!!")
+        error_details = str(e); error_code = 500
+        if e.response is not None:
+             error_code = e.response.status_code; error_details = e.response.text
+        return jsonify({"error": "토큰 교환 실패", "details": error_details}), error_code
+    except Exception as e:
+         print(f"!!! 토큰 교환/저장 오류: {e} !!!")
+         return jsonify({"error": "서버 내부 오류 (토큰 교환)"}), 500
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     static_folder = '../frontend/static/'
