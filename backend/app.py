@@ -16,40 +16,65 @@ from google.api_core import exceptions as google_exceptions
 # --- Firebase 초기화 ---
 # --- Firebase 초기화 ---
 # 환경 변수에서 서비스 계정 키 경로 가져오기, 기본값은 프로젝트 디렉토리의 JSON 파일
-SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "ciscoglucose-firebase-adminsdk-fbsvc-3864a20e01.json")
+# --- Firebase 초기화 ---
+SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "./ciscoglucose-firebase-adminsdk-fbsvc-3864a20e01.json")
 db = None
-try:
-    # 서비스 계정 키 파일 존재 여부 확인
-    print(f"Attempting to access service account key at: {SERVICE_ACCOUNT_KEY_PATH}")
-    if not os.path.exists(SERVICE_ACCOUNT_KEY_PATH):
-        raise FileNotFoundError(f"서비스 계정 키 파일이 존재하지 않습니다: {SERVICE_ACCOUNT_KEY_PATH}")
+# --- Firebase 초기화 ---
+SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "./ciscoglucose-firebase-adminsdk-fbsvc-3864a20e01.json")
+db = None
 
-    # 파일 읽기 권한 확인
-    if not os.access(SERVICE_ACCOUNT_KEY_PATH, os.R_OK):
-        raise PermissionError(f"서비스 계정 키 파일에 읽기 권한이 없습니다: {SERVICE_ACCOUNT_KEY_PATH}")
+def initialize_firebase():
+    global db
+    try:
+        print(f"GOOGLE_APPLICATION_CREDENTIALS 환경 변수: {os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '설정되지 않음')}")
+        print(f"Attempting to access service account key at: {SERVICE_ACCOUNT_KEY_PATH}")
+        if not os.path.exists(SERVICE_ACCOUNT_KEY_PATH):
+            raise FileNotFoundError(f"서비스 계정 키 파일이 존재하지 않습니다: {SERVICE_ACCOUNT_KEY_PATH}")
 
-    # Firebase 앱 초기화
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH)
-        firebase_admin.initialize_app(cred)
-        print("Firebase Admin SDK 초기화 성공")
-    else:
-        print("Firebase Admin SDK 이미 초기화됨")
+        if not os.access(SERVICE_ACCOUNT_KEY_PATH, os.R_OK):
+            raise PermissionError(f"서비스 계정 키 파일에 읽기 권한이 없습니다: {SERVICE_ACCOUNT_KEY_PATH}")
 
-    db = firestore.client()
-    print("Firebase Firestore 연결 성공")
-except FileNotFoundError as e:
-    print(f"!!! Firebase 초기화 오류: 파일을 찾을 수 없습니다: {e} !!! Firestore 기능이 비활성화됩니다.")
-    db = None
-except PermissionError as e:
-    print(f"!!! Firebase 초기화 오류: 파일 접근 권한 문제: {e} !!! Firestore 기능이 비활성화됩니다.")
-    db = None
-except Exception as e:
-    print(f"!!! Firebase 초기화 오류: {e} !!! Firestore 기능이 비활성화됩니다.")
-    db = None
+        # JSON 파일 형식 확인
+        with open(SERVICE_ACCOUNT_KEY_PATH, 'r') as f:
+            service_account_data = json.load(f)
+            print("서비스 계정 키 JSON 파일 형식 확인 완료")
+            print(f"프로젝트 ID: {service_account_data.get('project_id', '없음')}")
+            print(f"클라이언트 이메일: {service_account_data.get('client_email', '없음')}")
+
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH)
+            firebase_admin.initialize_app(cred)
+            print("Firebase Admin SDK 초기화 성공")
+        else:
+            print("Firebase Admin SDK 이미 초기화됨")
+
+        db = firestore.client()
+        print("Firebase Firestore 클라이언트 생성 성공")
+
+        # Firestore 연결 테스트
+        test_ref = db.collection('users').document('test').get()
+        if test_ref.exists:
+            print("Firestore 연결 테스트 성공: 테스트 문서 존재")
+        else:
+            print("Firestore 연결 테스트 성공: 테스트 문서 없음")
+    except FileNotFoundError as e:
+        print(f"!!! Firebase 초기화 오류: 파일을 찾을 수 없습니다: {e} !!! Firestore 기능이 비활성화됩니다.")
+        db = None
+    except PermissionError as e:
+        print(f"!!! Firebase 초기화 오류: 파일 접근 권한 문제: {e} !!! Firestore 기능이 비활성화됩니다.")
+        db = None
+    except json.JSONDecodeError as e:
+        print(f"!!! Firebase 초기화 오류: 서비스 계정 키 JSON 파일 형식이 잘못되었습니다: {e} !!! Firestore 기능이 비활성화됩니다.")
+        db = None
+    except Exception as e:
+        print(f"!!! Firebase 초기화 오류: {e} !!! Firestore 기능이 비활성화됩니다.")
+        db = None
+
+# 초기 초기화 시도
+initialize_firebase()
 
 # --- Flask 앱 설정 ---
-app = Flask(__name__)
+app = Flask(__name__,static_folder=None)
 # CORS 설정: 실제 배포 시에는 허용할 출처(프론트엔드 주소)를 명시하는 것이 안전합니다.
 CORS(app, origins=[os.environ.get("FRONTEND_URL", "*")], supports_credentials=True) # 모든 출처 허용 (개발용) 또는 환경변수 사용
 api = Api(app)
@@ -125,27 +150,47 @@ class PatientResource(Resource):
 
 class GlucoseResource(Resource):
     def get(self, patient_id):
-        if not db: return {"error": "Database service unavailable"}, 503
+        global db
+        if not db:
+            print("Firestore 연결 실패: db 객체가 None입니다. 초기화를 재시도합니다.")
+            initialize_firebase()
+            if not db:
+                print("Firestore 초기화 재시도 실패: db 객체가 여전히 None입니다.")
+                print("GOOGLE_APPLICATION_CREDENTIALS: ", os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '설정되지 않음'))
+                print(f"서비스 계정 키 파일 경로: {SERVICE_ACCOUNT_KEY_PATH}")
+                initialize_firebase()
+                return {"error": "Database service unavailable. Firestore initialization failed after retry. Check server logs for details."}, 503
+
         try:
-            # Firestore 쿼리: users/kimjaehoug/glulog 경로에서 모든 데이터 조회
+            print(f"Querying Firestore for glucose readings: users/kimjaehoug/glulog")
             readings_query = db.collection('users').document('kimjaehoug').collection('glulog') \
                               .order_by('timestamp', direction=firestore.Query.DESCENDING)
 
+            print("Executing Firestore query...")
             docs = readings_query.stream()
             readings_list = []
             for doc in docs:
                 data = doc.to_dict()
-                # Firestore 타임스탬프를 그대로 문자열로 반환 (프론트엔드 호환성)
+                print(f"Fetched document: {data}")
+                data['glucose'] = data.get('glucose', 0)
+                data['source'] = data.get('source', 'Unknown')
                 data['timestamp'] = data.get('timestamp', '')
                 readings_list.append(data)
 
-            readings_list.reverse()  # 시간 순서대로 정렬 (오래된 것 → 최신)
+            print(f"Total readings fetched: {len(readings_list)}")
+            readings_list.reverse()
             return {"readings": readings_list}, 200
+        except google_exceptions.NotFound as e:
+            print(f"Firestore collection not found: {e}")
+            return {"error": "Glucose data collection not found for user kimjaehoug"}, 404
+        except google_exceptions.PermissionDenied as e:
+            print(f"Firestore permission error: {e}")
+            return {"error": "Permission denied accessing Firestore data"}, 403
         except Exception as e:
             print(f"Error getting glucose readings for {patient_id}: {e}")
             if "index" in str(e).lower():
                 return {"error": "Database query requires an index. Please create it in the Firestore console."}, 500
-            return {"error": "Internal server error fetching glucose data"}, 500
+            return {"error": f"Internal server error fetching glucose data: {str(e)}"}, 500
 
     def post(self, patient_id):
         if not db: return {"error": "Database service unavailable"}, 503
@@ -663,7 +708,7 @@ def serve_index():
 # --- 정적 파일 제공 라우트 ---
 @app.route('/static/<path:filename>')
 def serve_static(filename):
-    static_folder = '../frontend/static'
+    static_folder = '../frontend/static/'
     print(f"Serving static file {filename} from {static_folder}")
     try:
         if not os.path.exists(os.path.join(static_folder, filename)):
@@ -687,4 +732,4 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5371))
     print(f"Starting server on port {port}...")
     # debug=True는 Vercel 배포 시에는 False로 설정하는 것이 좋음
-    app.run(host='0.0.0.0', port=port, debug=False if os.environ.get('VERCEL') else True)
+    app.run(host='0.0.0.0', port=port, debug=True)

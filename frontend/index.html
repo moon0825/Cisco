@@ -234,7 +234,7 @@
     <nav class="navbar navbar-light">
         <div class="container">
             <a class="navbar-brand" href="#">
-                <img src="/static/webex_logo.png" alt="Webex Logo" class="webex-logo">
+                <img src="static/webex_logo.png" alt="Webex Logo" class="webex-logo">
                 pGluc-Webex
             </a>
             <div>
@@ -445,7 +445,7 @@
 
     <script>
         const patientId = 'kimjaehoug';
-        const backendUrl = window.location.hostname === 'localhost' ? 'http://localhost:5371' : 'https://cisco-ejsn.vercel.app';
+        const backendUrl = window.location.hostname === 'localhost' ? 'http://192.168.0.44:5371' : 'https://cisco-ejsn.vercel.app';
         let glucoseChartInstance = null;
         let currentPatientData = {};
         let currentChartHours = 3;
@@ -908,23 +908,23 @@
         }
 
         async function fetchAllLogs(dateStr) {
-            showLoading('전체 기록 로딩 중...');
-            try {
-                const response = await fetch(`${backendUrl}/api/patients/${patientId}/glucose`);
-                if (response.ok) {
-                    const data = await response.json();
-                    const filteredReadings = data.readings.filter(r => r.timestamp.startsWith(dateStr));
-                    updateAllLogsUI(filteredReadings);
-                } else {
-                    throw new Error('Failed to load logs');
-                }
-            } catch (error) {
-                console.error("전체 기록 로딩 오류:", error);
-                allLogsContainerEl.innerHTML = '<div class="log-item text-center text-danger p-3">기록 로드 실패</div>';
-            } finally {
-                hideLoading();
-            }
+    showLoading('전체 기록 로딩 중...');
+    try {
+        const response = await fetch(`${backendUrl}/api/patients/${patientId}/glucose`);
+        if (response.ok) {
+            const data = await response.json();
+            const filteredReadings = data.readings.filter(r => r.timestamp.startsWith(dateStr));
+            updateAllLogsUI(filteredReadings);
+        } else {
+            throw new Error('Failed to load logs');
         }
+    } catch (error) {
+        console.error("전체 기록 로딩 오류:", error);
+        allLogsContainerEl.innerHTML = '<div class="log-item text-center text-danger p-3">기록 로드 실패</div>';
+    } finally {
+        hideLoading();
+    }
+}
 
         async function submitState() {
             const state = document.getElementById('stateInput').value;
