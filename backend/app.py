@@ -1,924 +1,862 @@
 # -*- coding: utf-8 -*-
+import sqlite3
+import json
+import os
+import time
+import random
+import uuid
 from threading import Thread
+from datetime import datetime, timedelta, timezone
+import pytz # 시간대 처리
 
-import pytz
-from flask import Flask, request, jsonify, send_from_directory  # send_from_directory 제거
-from flask import Flask, request, jsonify, redirect, session, url_for
+from flask import Flask, request, jsonify, redirect, session, url_for, send_from_directory
 from flask_restful import Api, Resource
 from flask_cors import CORS
-import os
-import json
-from apscheduler.schedulers.background import BackgroundScheduler
-import time
-from datetime import datetime, timedelta, timezone
-import random
-import requests # Webex OAuth 토큰 교환용
-import uuid     # OAuth state 생성용
-import firebase_admin
-from firebase_admin import credentials, firestore
-from google.api_core import exceptions as google_exceptions
 import numpy as np
-from bit_maml import run_prediction_task
-from bit_maml import predict_and_store_once
 
-KST = pytz.timezone("Asia/Seoul")
-import base64 # Base64 디코딩용
-import json   # JSON 파싱용
-
-# --- Firebase 초기화 (Base64 방식) ---
-SERVICE_ACCOUNT_KEY_BASE64 = os.environ.get('FIREBASE_SERVICE_ACCOUNT_BASE64')
-db = None
+# --- 로컬 모듈 임포트 (bit_maml.py가 SQLite를 사용하도록 수정되었다고 가정) ---
+# bit_maml.py 파일이 로컬 데이터(SQLite)를 사용하도록 수정되어야 합니다.
 try:
-    if not SERVICE_ACCOUNT_KEY_BASE64:
-        raise ValueError("FIREBASE_SERVICE_ACCOUNT_BASE64 환경 변수가 설정되지 않았습니다.")
+    # from bit_maml import run_prediction_task, predict_and_store_once
+    # 백그라운드 예측 실행은 SQLite 수정 후 활성화 고려
+    from bit_maml import predict_and_store_once
+except ImportError:
+    print("경고: bit_maml.py 모듈을 찾을 수 없거나 내부 오류 발생. 예측 기능이 작동하지 않을 수 있습니다.")
+    def predict_and_store_once(username, future_steps=50): # 더미 함수
+        print(f"[SIM] predict_and_store_once 호출됨 (사용자: {username}) - 실제 예측 불가")
+    # def run_prediction_task(): # 더미 함수
+    #     print("[SIM] run_prediction_task 시작 - 실제 예측 불가 (무한 루프 방지 위해 실행 안 함)")
 
-    print("Base64 서비스 계정 키 디코딩 시도...")
-    key_json_str = base64.b64decode(SERVICE_ACCOUNT_KEY_BASE64).decode('utf-8')
-    key_dict = json.loads(key_json_str)
-    print("서비스 계정 키 파싱 성공.")
-
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(key_dict)
-        firebase_admin.initialize_app(cred)
-        print("Firebase Admin SDK 초기화 성공 (Base64)")
-    else:
-        print("Firebase Admin SDK 이미 초기화됨 (Base64)")
-    db = firestore.client()
-    print("Firebase Firestore 클라이언트 생성 및 연결 성공")
-except Exception as e:
-    print(f"!!! Firebase 초기화 중 심각한 오류 발생: {e} !!!")
-    db = None
-
-
-# 최근 12개 데이터를 가져오는 함수
-def get_recent_glucose_features(patient_id, limit=12):
-    logs_ref = db.collection("users").document("kimjaehoug").collection("glulog")
-    logs = logs_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(limit).stream()
-
-    data = []
-    for log in logs:
-        entry = log.to_dict()
-        if 'glucose' in entry and 'exercise' in entry and 'meal' in entry:
-            data.append([
-                float(entry["glucose"]),
-                float(entry["exercise"]),
-                float(entry["meal"])
-            ])
-
-    if len(data) < limit:
-        raise ValueError("Not enough recent data (need at least 12)")
-
-    return np.array(data[::-1])
-
-
-# 예측하고 저장하는 함수
-
-
-# 백그라운드 쓰레드
-
-
-
-# 서버 시작 시 백그라운드 루프 시작
-# --- Flask 앱 설정 ---
+# --- 기본 설정 ---
 app = Flask(__name__)
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'fallback-dev-secret-key-should-be-set')
-if app.secret_key == 'fallback-dev-secret-key-should-be-set' and os.environ.get('VERCEL') == '1':
-     print("!!! 경고: FLASK_SECRET_KEY 환경 변수가 설정되지 않았습니다. !!!")
+# 로컬 실행 시 고정 시크릿 키 사용 가능 (보안 중요도 낮음)
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'local-dev-secret-key')
 
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://cisco-git-main-kihoon-moons-projects.vercel.app") # 환자용
-DASHBOARD_URL = os.environ.get("DASHBOARD_URL") # 의료진 대시보드용 (새로 추가)
-
-allowed_origins = [FRONTEND_URL, "http://localhost:5000", "http://localhost:3000"] # 로컬 개발 환경 추가
-if DASHBOARD_URL:
-    allowed_origins.append(DASHBOARD_URL)
-    print(f"의료진 대시보드 CORS 허용: {DASHBOARD_URL}")
-else:
-    # 대시보드 URL 환경변수가 없으면 경고만 출력하거나, 기본값을 넣을 수도 있음
-    print("!!! 경고: DASHBOARD_URL 환경 변수가 설정되지 않았습니다. 대시보드 CORS 문제가 발생할 수 있습니다. !!!")
-    # allowed_origins.append("https://cisco-wten.vercel.app") # 또는 여기에 직접 추가
-
-# 수정된 origins 리스트 사용
+# --- CORS 설정 (로컬 개발 환경용) ---
+# 로컬 프론트엔드 주소에 맞게 수정 (예: http://localhost:3000, http://127.0.0.1:xxxx 등)
+FRONTEND_URL = "http://localhost:8000" # frontend/index.html 실행 포트 (예시)
+DASHBOARD_URL = "http://localhost:8001" # dashboard-frontend/index.html 실행 포트 (예시)
+allowed_origins = [FRONTEND_URL, DASHBOARD_URL, "http://localhost:5000", "http://127.0.0.1:5000"]
 CORS(app, origins=allowed_origins, supports_credentials=True)
 api = Api(app)
 
-# --- Webex OAuth 설정 ---
-WEBEX_CLIENT_ID = os.environ.get('WEBEX_CLIENT_ID')
-WEBEX_CLIENT_SECRET = os.environ.get('WEBEX_CLIENT_SECRET')
-WEBEX_REDIRECT_URI = os.environ.get('WEBEX_REDIRECT_URI')
-WEBEX_AUTHORIZE_URL = "https://webexapis.com/v1/authorize"
-WEBEX_TOKEN_URL = "https://webexapis.com/v1/access_token"
-WEBEX_SCOPES = os.environ.get("WEBEX_SCOPES", "spark-admin:messages_write meeting:schedules_write meeting:schedules_read spark:people_read spark:rooms_write spark:teams_write spark:team_memberships_write" )
+# --- SQLite 데이터베이스 설정 ---
+DATABASE = 'local_pgluc.db'
+KST = pytz.timezone("Asia/Seoul") # 한국 시간대
 
-# --- Webex 통합 모듈 임포트 ---
-try:
-    from webex_integration import WebexAPI, MedicalWebexIntegration
-except ImportError:
-    print("경고: webex_integration.py 모듈을 찾을 수 없습니다. Webex 기능이 시뮬레이션됩니다.")
-    class WebexAPI:
-        def __init__(self, access_token=None): pass
-        def get_user_info(self): return {"displayName": "Simulated User"}
-    class MedicalWebexIntegration:
-         def __init__(self, webex_api): self.webex_api = webex_api
-         def create_emergency_session(self, **kwargs): print("[SIM] 긴급 세션 생성:", kwargs); return {"id": "sim_session", "joinUrl": "https://webex.example/sim"}
-         def send_glucose_alert(self, **kwargs): print("[SIM] 혈당 알림:", kwargs); return {"id": "sim_msg"}
-         def schedule_regular_checkup(self, **kwargs): print("[SIM] 정기 검진 예약:", kwargs); return {"id": "sim_meeting", "webLink": "https://webex.example/sim_meet"}
+def get_db():
+    """SQLite 데이터베이스 연결 반환"""
+    conn = sqlite3.connect(DATABASE)
+    # 결과를 딕셔너리처럼 접근 가능하게 설정
+    conn.row_factory = sqlite3.Row
+    return conn
 
-# --- Firestore 컬렉션 이름 ---
-PATIENTS_COLLECTION = 'patients'
-GLUCOSE_COLLECTION = 'glucoseReadings'
-PREDICTIONS_COLLECTION = 'predictions'
-ALERTS_COLLECTION = 'alerts'
-TOKENS_COLLECTION = 'webex_tokens'
-DOCTORS_COLLECTION = 'doctors' # 의사 정보용 (선택적)
-
-# --- Helper Function (기존 코드 유지) ---
-# 한국 시간대 (KST)
-def firestore_timestamp_to_iso(timestamp):
-    if timestamp and hasattr(timestamp, 'isoformat'):
-        dt = timestamp # Assume it's already a datetime object from Firestore
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.isoformat(timespec='seconds')
-    return None
-
-# --- Webex Token 관리 함수 (Firestore 사용) ---
-def store_tokens(user_id, access_token, refresh_token, expires_in):
-    if not db: return False
+def init_db():
+    """데이터베이스 테이블 초기화 (존재하지 않을 경우 생성)"""
+    print(f"Initializing SQLite database: {DATABASE}")
+    conn = None
     try:
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in) - 300) # 5분 여유
-        token_ref = db.collection(TOKENS_COLLECTION).document(user_id)
-        token_ref.set({
-            'user_id': user_id, 'access_token': access_token,
-            'refresh_token': refresh_token, 'expires_at': expires_at
-        }, merge=True)
-        print(f"토큰 저장 완료: 사용자={user_id}")
-        return True
-    except Exception as e: print(f"!!! 토큰 저장 실패 ({user_id}): {e} !!!"); return False
+        conn = get_db()
+        cursor = conn.cursor()
+        # 환자 테이블
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS patients (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            doctor_id TEXT,
+            email TEXT,
+            target_glucose_range TEXT, -- JSON 문자열 (예: '{"min": 70, "max": 180}')
+            other_data TEXT -- 추가 정보 JSON 문자열
+        )''')
+        # 혈당 측정 테이블
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS glucose_readings (
+            doc_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patientId TEXT NOT NULL,
+            value REAL,
+            unit TEXT,
+            source TEXT,
+            timestamp TEXT NOT NULL UNIQUE, -- ISO 8601 UTC 문자열
+            meal REAL DEFAULT 0,
+            exercise REAL DEFAULT 0,
+            stressors REAL DEFAULT 0.0,
+            hypo_event REAL DEFAULT 0.0,
+            hour REAL DEFAULT 0.0,
+            is_night REAL DEFAULT 0.0,
+            is_meal_time REAL DEFAULT 0.0
+        )''')
+        # 예측 테이블
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS predictions (
+            patientId TEXT NOT NULL,
+            timestamp TEXT NOT NULL, -- 예측 대상 시점 (ISO 8601 UTC)
+            value REAL,
+            predicted_at TEXT, -- 예측 생성 시점 (ISO 8601 UTC)
+            PRIMARY KEY (patientId, timestamp)
+        )''')
+        # 알림 테이블
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patientId TEXT NOT NULL,
+            type TEXT, -- 'low', 'high' 등
+            predicted_value REAL,
+            current_value REAL,
+            time_window INTEGER, -- 예: 30 (분)
+            message TEXT,
+            timestamp TEXT NOT NULL, -- 알림 생성 시점 (ISO 8601 UTC)
+            current_reading_timestamp TEXT, -- 관련 혈당 측정 시점 (ISO 8601 UTC)
+            status TEXT DEFAULT 'active', -- 'active', 'acknowledged', 'resolved' 등
+            acknowledged INTEGER DEFAULT 0, -- 0: false, 1: true
+            acknowledged_at TEXT
+        )''')
+        # 상태 기록 테이블
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS states (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id TEXT NOT NULL,
+            state TEXT, -- 'meal' or 'exercise'
+            value REAL,
+            time TEXT NOT NULL -- 상태 기록 시점 (ISO 8601 UTC)
+        )''')
+        # (선택) Webex 토큰 테이블 (로컬에서는 크게 의미 없을 수 있음)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS webex_tokens (
+            user_id TEXT PRIMARY KEY,
+            access_token TEXT,
+            refresh_token TEXT,
+            expires_at TEXT -- ISO 8601 UTC 문자열
+        )''')
+        conn.commit()
+        print("Local SQLite database initialized successfully.")
+    except sqlite3.Error as e:
+        print(f"!!! Database initialization error: {e} !!!")
+    finally:
+        if conn:
+            conn.close()
 
-def get_tokens(user_id):
-    if not db: return None
-    try:
-        doc = db.collection(TOKENS_COLLECTION).document(user_id).get()
-        return doc.to_dict() if doc.exists else None
-    except Exception as e: print(f"!!! 토큰 가져오기 실패 ({user_id}): {e} !!!"); return None
-
-def refresh_tokens(user_id, refresh_token):
-    if not db or not all([WEBEX_CLIENT_ID, WEBEX_CLIENT_SECRET]): return None
-    if not refresh_token: print(f"!!! 토큰 갱신 불가: Refresh Token 없음 ({user_id}) !!!"); return None
-
-    print(f"Webex 토큰 갱신 시도: 사용자={user_id}")
-    payload = { 'grant_type': 'refresh_token', 'client_id': WEBEX_CLIENT_ID,
-                'client_secret': WEBEX_CLIENT_SECRET, 'refresh_token': refresh_token }
-    try:
-        response = requests.post(WEBEX_TOKEN_URL, data=payload)
-        response.raise_for_status()
-        data = response.json()
-        print(f"토큰 갱신 성공: 사용자={user_id}")
-        store_tokens(user_id, data['access_token'], data.get('refresh_token', refresh_token), data['expires_in'])
-        return data['access_token']
-    except requests.exceptions.RequestException as e:
-        print(f"!!! 토큰 갱신 API 요청 실패 ({user_id}): {e} !!!")
-        if e.response is not None and e.response.status_code in [400, 401]:
-            print("Refresh Token 만료/오류 가능성. 재인증 필요.")
-            try: db.collection(TOKENS_COLLECTION).document(user_id).delete(); print(f"갱신 실패로 사용자 {user_id} 토큰 삭제됨")
-            except: pass
-    if timestamp is None:
+# --- Helper Functions ---
+def format_timestamp_local(iso_utc_string):
+    """ISO UTC 문자열을 KST 'YYYY-MM-DD HH:mm:ss' 형식으로 변환"""
+    if not iso_utc_string:
         return None
-
     try:
-        # Firestore Timestamp 객체 (datetime)
-        if isinstance(timestamp, datetime):
-            return timestamp.isoformat(timespec='seconds')
+        dt_utc = datetime.fromisoformat(iso_utc_string.replace('Z', '+00:00'))
+        dt_kst = dt_utc.astimezone(KST)
+        return dt_kst.strftime('%Y-%m-%d %H:%mm:%ss')
+    except (ValueError, TypeError):
+        return iso_utc_string # 변환 실패 시 원본 반환
 
-        # 문자열인 경우
-        if isinstance(timestamp, str):
+def dict_factory(cursor, row):
+    """SQLite 결과를 딕셔너리로 변환 (json 필드 포함)"""
+    d = {}
+    for idx, col in enumerate(cursor.description):
+        col_name = col[0]
+        value = row[idx]
+        # JSON 문자열 필드 자동 파싱 시도 (예: target_glucose_range, other_data)
+        if isinstance(value, str) and value.startswith('{') and value.endswith('}'):
             try:
-                dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-                return dt.isoformat(timespec='seconds')
-            except ValueError:
-                print(f"[경고] 문자열 timestamp 파싱 실패: {timestamp}")
-                return None
+                d[col_name] = json.loads(value)
+            except json.JSONDecodeError:
+                d[col_name] = value # 파싱 실패 시 문자열 그대로
+        else:
+            d[col_name] = value
+    return d
 
-    except Exception as e:
-        print(f"[에러] timestamp 변환 실패: {timestamp} → {e}")
-        return None
-
-def get_valid_webex_token(user_id):
-    token_data = get_tokens(user_id)
-    if not token_data: return None
-
-    expires_at = token_data.get('expires_at')
-    # Firestore Timestamp -> Python datetime 변환 (타임존 인식)
-    if expires_at and hasattr(expires_at, 'replace') and not isinstance(expires_at, datetime):
-         try: expires_at = expires_at.replace(tzinfo=timezone.utc)
-         except: expires_at = None
-
-    if isinstance(expires_at, datetime) and expires_at > datetime.now(timezone.utc):
-        print(f"유효한 토큰 사용: 사용자={user_id}")
-        return token_data.get('access_token')
-    else:
-        print(f"토큰 만료 또는 시간 정보 없음, 갱신 시도: 사용자={user_id}")
-        return refresh_tokens(user_id, token_data.get('refresh_token'))
-
-def get_webex_api_client_for_user(user_id):
-     access_token = get_valid_webex_token(user_id)
-     return WebexAPI(access_token=access_token) if access_token else None
-
-# --- OAuth 인증 관련 API 엔드포인트 ---
-@app.route('/api/webex/auth/initiate')
-def webex_auth_initiate():
-    user_id_to_auth = request.args.get('user_id', 'doctor1') # 인증 대상 사용자 ID
-    if not all([WEBEX_CLIENT_ID, WEBEX_REDIRECT_URI, WEBEX_SCOPES]):
-        return jsonify({"error": "Webex OAuth 미설정"}), 500
-    state = str(uuid.uuid4())
-    session['webex_oauth_state'] = state
-    session['webex_auth_user_id'] = user_id_to_auth
-    params = { 'response_type': 'code', 'client_id': WEBEX_CLIENT_ID,
-               'redirect_uri': WEBEX_REDIRECT_URI, 'scope': WEBEX_SCOPES, 'state': state }
-    auth_url = f"{WEBEX_AUTHORIZE_URL}?{requests.compat.urlencode(params)}"
-    print(f"Webex 인증 시작: 사용자={user_id_to_auth}, URL={auth_url}")
-    return redirect(auth_url)
-
-@app.route('/api/webex/auth/callback')
-def webex_auth_callback():
-    error = request.args.get('error')
-    if error: return jsonify({"error": "Webex OAuth Error", "details": error}), 400
-    code = request.args.get('code')
-    state = request.args.get('state')
-    expected_state = session.pop('webex_oauth_state', None)
-    user_id = session.pop('webex_auth_user_id', None)
-
-    if not expected_state or state != expected_state: return jsonify({"error": "Invalid OAuth state"}), 400
-    if not code or not user_id: return jsonify({"error": "Missing code or user context"}), 400
-    if not all([WEBEX_CLIENT_ID, WEBEX_CLIENT_SECRET, WEBEX_REDIRECT_URI]):
-         return jsonify({"error": "Webex OAuth 미설정"}), 500
-
-    payload = { 'grant_type': 'authorization_code', 'client_id': WEBEX_CLIENT_ID,
-                'client_secret': WEBEX_CLIENT_SECRET, 'code': code, 'redirect_uri': WEBEX_REDIRECT_URI }
-    try:
-        response = requests.post(WEBEX_TOKEN_URL, data=payload)
-        response.raise_for_status()
-        data = response.json()
-        success = store_tokens(user_id, data['access_token'], data['refresh_token'], data['expires_in'])
-        if success:
-             # TODO: 성공 후 프론트엔드 리디렉션 또는 메시지 개선
-             return jsonify({"message": f"Webex 인증 성공: 사용자={user_id}"})
-        else: return jsonify({"error": "토큰 저장 실패"}), 500
-    except requests.exceptions.RequestException as e:
-        print(f"!!! 토큰 교환 실패: {e} !!!")
-        error_details = str(e); error_code = 500
-        if e.response is not None:
-             error_code = e.response.status_code; error_details = e.response.text
-        return jsonify({"error": "토큰 교환 실패", "details": error_details}), error_code
-    except Exception as e:
-         print(f"!!! 토큰 교환/저장 오류: {e} !!!")
-         return jsonify({"error": "서버 내부 오류 (토큰 교환)"}), 500
-
-# --- API 리소스 정의 (Firestore 사용) ---
+# --- API 리소스 정의 (SQLite 사용) ---
 
 class PatientResource(Resource):
     def get(self, patient_id):
-        if not db:
-            return {"error": "Database service unavailable"}, 503
+        conn = get_db()
+        conn.row_factory = dict_factory # JSON 자동 파싱 포함 팩토리 사용
         try:
-            patient_ref = db.collection('users').document(patient_id)
-            doc = patient_ref.get()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM patients WHERE id = ?", (patient_id,))
+            patient_data = cursor.fetchone()
 
-            if doc.exists:
-                data = doc.to_dict()
-                # 직렬화 불가능한 타입 정제
-                for key, value in data.items():
-                    if isinstance(value, set):
-                        data[key] = list(value)
-
-                # 누락된 필드 보완
-                data.setdefault("name", "이름 없음")
-                data.setdefault("target_glucose_range", {"min": 70, "max": 180})
-                return data, 200
-
+            if patient_data:
+                # 누락 필드 보완 (데이터베이스에 기본값이 없으므로 여기서 처리)
+                patient_data.setdefault("name", "이름 없음")
+                patient_data.setdefault("target_glucose_range", {"min": 70, "max": 180})
+                return patient_data, 200
             else:
-                # 문서 없을 시 기본 환자 정보 리턴
-                default_data = {
-                    "name": "김재홍",
-                    "target_glucose_range": {"min": 40, "max": 200}
+                # 환자 정보 없을 때 기본값 또는 404 반환
+                # return {"error": "Patient not found"}, 404
+                 default_data = {
+                    "id": patient_id,
+                    "name": f"{patient_id} (로컬)",
+                    "target_glucose_range": {"min": 70, "max": 180}
                 }
-                return default_data, 200
+                 return default_data, 200 # 테스트 편의상 기본값 반환
 
-        except Exception as e:
-            print(f"[PatientResource.get] Error for patient_id={patient_id}: {e}")
-            return {"error": "Internal server error fetching patient data"}, 500
+        except sqlite3.Error as e:
+            print(f"SQLite Error fetching patient {patient_id}: {e}")
+            return {"error": "Database error fetching patient data"}, 500
+        finally:
+            if conn: conn.close()
 
-
+    # POST, PUT, DELETE 메서드 필요시 SQLite에 맞게 구현
 
 class StateResource(Resource):
     def get(self, patient_id):
-        """상태 기록 조회"""
-        if not db:
-            return {"error": "Database unavailable"}, 503
+        """상태 기록 조회 (최근 50개)"""
+        conn = get_db()
+        conn.row_factory = dict_factory
         try:
-            docs = db.collection("state").document(patient_id).collection("log") \
-                .order_by("time", direction=firestore.Query.DESCENDING) \
-                .limit(50).stream()
-
-            states = []
-            for doc in docs:
-                data = doc.to_dict()
-                time_raw = data.get("time")
-                # time 필드가 datetime일 경우 ISO 포맷으로 직렬화
-                if isinstance(time_raw, datetime):
-                    time_str = time_raw.astimezone(pytz.timezone("Asia/Seoul")).isoformat()
-                else:
-                    time_str = time_raw  # 혹시 모르니 fallback
-
-                states.append({
-                    "time": time_str,
-                    "state": data.get("state"),
-                    "meal": data.get("meal", 0),
-                    "exercise": data.get("exercise", 0)
-                })
-
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM states
+                WHERE patient_id = ?
+                ORDER BY time DESC
+                LIMIT 50
+            ''', (patient_id,))
+            states = cursor.fetchall()
             return {"states": states}, 200
-
-        except Exception as e:
-            print(f"[StateResource.get] Error: {e}")
-            return {"error": "Internal server error fetching states"}, 500
+        except sqlite3.Error as e:
+            print(f"SQLite Error fetching states for {patient_id}: {e}")
+            return {"error": "Database error fetching state data"}, 500
+        finally:
+            if conn: conn.close()
 
     def post(self, patient_id):
-        if not db:
-            return {"error": "Database unavailable"}, 503
+        """상태 기록 추가 (및 최신 혈당 로그 업데이트)"""
+        payload = request.get_json()
+        if not payload:
+            return {"error": "No input data provided"}, 400
+
+        field_name = None
+        value = None
+        state_type = None
+        if "meal" in payload:
+            field_name = "meal"
+            value = float(payload["meal"])
+            state_type = "meal"
+        elif "exercise" in payload:
+            field_name = "exercise"
+            value = float(payload["exercise"])
+            state_type = "exercise"
+        else:
+            return {"error": "Invalid state type. Only 'meal' or 'exercise' allowed."}, 400
+
+        conn = get_db()
         try:
-            payload = request.get_json()
-            if not payload:
-                return {"error": "No input data provided"}, 400
+            cursor = conn.cursor()
+            now_utc_iso = datetime.now(timezone.utc).isoformat()
 
-            # 어떤 상태인지 판별
-            field_name = None
-            value = None
-            if "meal" in payload:
-                field_name = "meal"
-                value = float(payload["meal"])
-                state_type = "meal"
-            elif "exercise" in payload:
-                field_name = "exercise"
-                value = float(payload["exercise"])
-                state_type = "exercise"
-            else:
-                return {"error": "Invalid state type. Only 'meal' or 'exercise' allowed."}, 400
+            # --- 1단계: glulog (glucose_readings) 가장 최근 데이터 업데이트 ---
+            # 최신 로그 ID 찾기
+            cursor.execute('''
+                SELECT doc_id FROM glucose_readings
+                WHERE patientId = ? ORDER BY timestamp DESC LIMIT 1
+            ''', (patient_id,))
+            recent_log = cursor.fetchone()
 
-            # --- 1단계: glulog 가장 최근 데이터 업데이트 ---
-            logs_ref = db.collection("users").document(patient_id).collection("glulog")
-            docs = logs_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(1).stream()
-            recent_doc = next(docs, None)
+            if not recent_log:
+                 conn.rollback() # 롤백 후 에러 반환
+                 return {"error": "No existing glucose log found to update"}, 404
 
-            if not recent_doc:
-                return {"error": "No existing glucose log found to update"}, 404
-
-            recent_doc_ref = logs_ref.document(recent_doc.id)
-            recent_doc_ref.update({field_name: value})
+            recent_log_id = recent_log['doc_id']
+            # 해당 로그 업데이트 (여기서 field_name은 SQL 인젝션 위험 없음)
+            cursor.execute(f'''
+                UPDATE glucose_readings SET {field_name} = ?
+                WHERE doc_id = ?
+            ''', (value, recent_log_id))
+            print(f"Updated glucose_readings log {recent_log_id} with {field_name}={value}")
 
             # --- 2단계: state/{patient_id}/{timestamp} 저장 ---
-            now_kst = datetime.now(pytz.timezone("Asia/Seoul"))
-            timestamp_str = now_kst.strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute('''
+                INSERT INTO states (patient_id, state, value, time)
+                VALUES (?, ?, ?, ?)
+            ''', (patient_id, state_type, value, now_utc_iso))
 
-            state_ref = db.collection("state").document(patient_id).collection("log").document(timestamp_str)
-            state_ref.set({
-                "state": state_type,
-                "value": value,
-                "time": timestamp_str,
-                "patient_id": patient_id
-            })
-
+            conn.commit()
             print(f"[StateResource.post] ✅ {field_name}={value} 업데이트 완료 & 상태 기록 저장")
-            predict_and_store_once(patient_id)
+
+            # 상태 변경 후 예측 업데이트 트리거
+            try:
+                predict_and_store_once(patient_id)
+            except Exception as pred_e:
+                print(f"Warning: Failed to trigger prediction after state update: {pred_e}")
+
             return {"message": f"{field_name} updated & state saved"}, 200
 
-        except Exception as e:
-            print(f"[StateResource.post] Error: {e}")
-            return {"error": "Internal server error updating state"}, 500
+        except sqlite3.Error as e:
+            if conn: conn.rollback()
+            print(f"[StateResource.post] SQLite Error: {e}")
+            return {"error": "Database error updating state"}, 500
+        finally:
+            if conn: conn.close()
+
+
 class GlucoseResource(Resource):
     def get(self, patient_id):
-        if not db: return {"error": "DB 미연결"}, 503
-        try:
-            hours = request.args.get('hours', default=24, type=int)
-            limit = min(hours * 12, 1000) # 5분 간격 가정
+        hours = request.args.get('hours', default=24, type=int)
+        # 시간 기준으로 필터링 (SQLite는 문자열 비교 가능)
+        limit = hours * 12 # 5분 간격 가정, 최대 조회 개수 (성능 고려)
+        limit = min(limit, 2000) # 너무 많지 않게 제한
 
-            readings_query = db.collection(GLUCOSE_COLLECTION) \
-                                .where('patientId', '==', patient_id) \
-                                .order_by('timestamp', direction=firestore.Query.DESCENDING) \
-                                .limit(limit)
-            docs = readings_query.stream()
-            readings_list = []
-            for doc in docs:
-                data = doc.to_dict()
-                data['timestamp'] = firestore_timestamp_to_iso(data.get('timestamp'))
-                readings_list.append(data)
-            readings_list.reverse() # 시간순
-            print(f"환자({patient_id}) 혈당 {len(readings_list)}개 조회 완료")
+        time_threshold = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+
+        conn = get_db()
+        conn.row_factory = dict_factory
+        readings_list = []
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM glucose_readings
+                WHERE patientId = ? AND timestamp >= ?
+                ORDER BY timestamp ASC -- 시간순으로 반환 (오래된 것부터)
+                LIMIT ?
+            ''', (patient_id, time_threshold, limit))
+            readings_list = cursor.fetchall()
+            print(f"환자({patient_id}) 혈당 {len(readings_list)}개 조회 완료 (최근 {hours}시간)")
             return {"readings": readings_list}, 200
-        except google_exceptions.FailedPrecondition as e:
-             if "index" in str(e).lower():
-                 print(f"!!! Firestore 인덱스 필요: {e} !!!")
-                 return {"error": "DB 쿼리 인덱스 필요"}, 400
-             else: raise e
-        except Exception as e:
-            print(f"혈당({patient_id}) 조회 오류: {e}")
-            return {"error": "서버 오류 (혈당 조회)"}, 500
+        except sqlite3.Error as e:
+            print(f"SQLite Error fetching glucose for {patient_id}: {e}")
+            return {"error": "Database error fetching glucose data"}, 500
+        finally:
+            if conn: conn.close()
 
     def post(self, patient_id):
-        if not db: return {"error": "DB 미연결"}, 503
-        try:
-            if not db.collection(PATIENTS_COLLECTION).document(patient_id).get().exists:
-                return {"error": "환자 없음"}, 404
-            data = request.get_json()
-            if not data or 'value' not in data: return {"error": "'value' 필수"}, 400
+        # 환자 존재 여부 확인 (선택적)
+        # conn_check = get_db()
+        # patient_exists = conn_check.execute("SELECT 1 FROM patients WHERE id = ?", (patient_id,)).fetchone()
+        # conn_check.close()
+        # if not patient_exists:
+        #     return {"error": "Patient not found"}, 404
 
-            new_reading_data = {
-                'patientId': patient_id, 'value': data['value'],
-                'unit': data.get('unit', 'mg/dL'), 'source': data.get('source', 'Manual'),
-                'timestamp': firestore.SERVER_TIMESTAMP
-            }
-            update_time, doc_ref = db.collection(GLUCOSE_COLLECTION).add(new_reading_data)
-            print(f'혈당 추가: ID={doc_ref.id}, 환자={patient_id} at {update_time}')
+        data = request.get_json()
+        if not data or 'value' not in data: return {"error": "'value' field is required"}, 400
+
+        conn = get_db()
+        try:
+            cursor = conn.cursor()
+            now_utc_iso = datetime.now(timezone.utc).isoformat()
+            value = data['value']
+            unit = data.get('unit', 'mg/dL')
+            source = data.get('source', 'Manual')
+            # 추가 필드 (meal, exercise 등)는 기본값 0으로 들어감
+            cursor.execute('''
+                INSERT INTO glucose_readings (patientId, value, unit, source, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (patient_id, value, unit, source, now_utc_iso))
+            new_id = cursor.lastrowid
+            conn.commit()
+            print(f'혈당 추가: ID={new_id}, 환자={patient_id} at {now_utc_iso}')
+
+            # 예측 및 알림 로직 트리거
             self._trigger_prediction_update(patient_id)
-            return {"message": "혈당 추가 성공", "id": doc_ref.id}, 201
-        except Exception as e:
-            print(f"혈당({patient_id}) 추가 오류: {e}")
-            return {"error": "서버 오류 (혈당 추가)"}, 500
+
+            return {"message": "Glucose reading added successfully", "id": new_id}, 201
+        except sqlite3.IntegrityError as e: # UNIQUE constraint 실패 (timestamp)
+            if conn: conn.rollback()
+            print(f"SQLite Integrity Error adding glucose for {patient_id}: {e}")
+            # 동일 타임스탬프 데이터가 이미 존재할 경우 어떻게 처리할지 결정 (예: 무시, 오류 반환)
+            return {"error": "Duplicate timestamp for glucose reading"}, 409 # Conflict
+        except sqlite3.Error as e:
+            if conn: conn.rollback()
+            print(f"SQLite Error adding glucose for {patient_id}: {e}")
+            return {"error": "Database error adding glucose data"}, 500
+        finally:
+            if conn: conn.close()
 
     def _trigger_prediction_update(self, patient_id):
-        print(f"예측/알림 업데이트 트리거: {patient_id}")
+        """로컬 예측/알림 업데이트 트리거"""
+        print(f"Triggering local prediction/alert update for: {patient_id}")
         try:
-            self._run_prediction_and_alerting_logic(patient_id)
+            # 여기서 직접 로직 실행 또는 백그라운드 작업 큐에 넣기
+            self._run_prediction_and_alerting_logic_local(patient_id)
         except Exception as e:
-            print(f"!!! 예측/알림 로직 실행 중 오류 ({patient_id}): {e} !!!")
+            print(f"!!! Error during prediction/alert trigger ({patient_id}): {e} !!!")
 
-    def _run_prediction_and_alerting_logic(self, patient_id):
-        if not db: return
-        print(f"Firestore 예측/알림 로직 시작: {patient_id}")
-        pred_ref = db.collection(PREDICTIONS_COLLECTION).document(patient_id)
-        alert_collection = db.collection(ALERTS_COLLECTION)
-        patient_ref = db.collection(PATIENTS_COLLECTION).document(patient_id)
+    def _run_prediction_and_alerting_logic_local(self, patient_id):
+        """SQLite 기반 예측/알림 로직 (시뮬레이션 포함)"""
+        print(f"Running local prediction/alert logic for: {patient_id}")
+        conn = get_db()
+        conn.row_factory = dict_factory # JSON 파싱 팩토리 사용
         try:
-            readings_query = db.collection(GLUCOSE_COLLECTION) \
-                                .where('patientId', '==', patient_id) \
-                                .order_by('timestamp', direction=firestore.Query.DESCENDING).limit(12)
-            docs = list(readings_query.stream())
-            if len(docs) < 1: # 데이터 부족 처리
-                print(f"예측 위한 혈당 데이터 부족 ({len(docs)}개)"); return
+            cursor = conn.cursor()
 
-            docs.reverse()
-            latest_reading_doc = docs[-1].to_dict(); latest_reading_value = latest_reading_doc.get('value')
-            latest_reading_ts = latest_reading_doc.get('timestamp')
-            if latest_reading_value is None or latest_reading_ts is None: return
+            # 1. 최신 혈당 데이터 가져오기 (예측 입력용)
+            cursor.execute('''
+                SELECT value, timestamp FROM glucose_readings
+                WHERE patientId = ? ORDER BY timestamp DESC LIMIT 12
+            ''', (patient_id,))
+            readings = cursor.fetchall()
 
-            # 예측 시뮬레이션 (TODO: 실제 모델 연동)
+            if not readings or len(readings) < 1:
+                print(f"  예측 위한 혈당 데이터 부족 ({len(readings)}개)")
+                return
+
+            # readings는 최신순이므로 시간 역순으로 정렬 필요 (오래된 것부터)
+            readings.reverse()
+            latest_reading = readings[-1]
+            latest_reading_value = latest_reading.get('value')
+            latest_reading_ts_iso = latest_reading.get('timestamp')
+
+            if latest_reading_value is None or latest_reading_ts_iso is None:
+                print("  최신 혈당 값 또는 타임스탬프 누락")
+                return
+
+            # --- 실제 예측 모델 호출 (bit_maml.py가 SQLite 사용하도록 수정되었다고 가정) ---
+            # try:
+            #     # predict_and_store_once 가 예측 결과를 DB에 저장한다고 가정
+            #     predict_and_store_once(patient_id)
+            #     # 저장된 최신 예측 결과 가져오기 (예: 30분 후)
+            #     cursor.execute('''
+            #         SELECT value, timestamp FROM predictions
+            #         WHERE patientId = ? ORDER BY timestamp ASC LIMIT 1
+            #     ''', (patient_id,)) # ASC: 가장 가까운 미래
+            #     pred_30min_row = cursor.fetchone()
+            #     prediction_30min = pred_30min_row['value'] if pred_30min_row else None
+            #     # 60분 후 예측 등 필요시 추가 조회
+            #     print(f"  실제 예측 결과 사용: 30min={prediction_30min}")
+            # except Exception as model_err:
+            #     print(f"  실제 예측 모델 호출 실패: {model_err}, 시뮬레이션 진행")
+            #     prediction_30min = max(40, min(300, latest_reading_value + random.randint(-20, 20)))
+
+            # --- 예측 시뮬레이션 (실제 모델 연동 전) ---
             prediction_30min = max(40, min(300, latest_reading_value + random.randint(-20, 20)))
-            prediction_60min = max(40, min(300, prediction_30min + random.randint(-15, 15)))
-            print(f"  예측 결과: 30min={prediction_30min}, 60min={prediction_60min}")
+            # prediction_60min = max(40, min(300, prediction_30min + random.randint(-15, 15)))
+            print(f"  예측 시뮬레이션 결과: 30min={prediction_30min}")
+            # 시뮬레이션 결과도 predictions 테이블에 저장 (선택적)
+            pred_ts_30min = (datetime.fromisoformat(latest_reading_ts_iso) + timedelta(minutes=30)).isoformat()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cursor.execute('''
+                INSERT OR REPLACE INTO predictions (patientId, timestamp, value, predicted_at)
+                VALUES (?, ?, ?, ?)
+            ''', (patient_id, pred_ts_30min, prediction_30min, now_iso))
+            # conn.commit() # 아래 알림 저장 후 한번에 커밋
 
-            prediction_data = {
-                "current": {"timestamp": latest_reading_ts, "value": latest_reading_value},
-                "prediction_30min": {"timestamp": latest_reading_ts + timedelta(minutes=30), "value": prediction_30min},
-                "prediction_60min": {"timestamp": latest_reading_ts + timedelta(minutes=60), "value": prediction_60min},
-                "status": "success", "updated_at": firestore.SERVER_TIMESTAMP
-            }
-            pred_ref.set(prediction_data)
-            print(f"  Firestore 예측 저장 완료")
+            # 2. 알림 생성 로직
+            cursor.execute("SELECT target_glucose_range, doctor_id FROM patients WHERE id = ?", (patient_id,))
+            patient_info = cursor.fetchone()
 
-            # 알림 생성/전송 로직
-            patient_snap = patient_ref.get()
-            if not patient_snap.exists: return
-            patient_info = patient_snap.to_dict(); doctor_id = patient_info.get("doctor_id")
-            if not doctor_id: return
+            if not patient_info:
+                print(f"  환자 정보({patient_id}) 없음, 알림 생성 불가")
+                return
+
+            doctor_id = patient_info.get("doctor_id")
             target_range = patient_info.get("target_glucose_range", {"min": 70, "max": 180})
-            alert_type = None; predicted_value = None
-            if prediction_30min < target_range["min"]: alert_type = "low"; predicted_value = prediction_30min
-            elif prediction_30min > target_range["max"]: alert_type = "high"; predicted_value = prediction_30min
+            # target_glucose_range가 JSON 문자열이므로 파싱 필요
+            if isinstance(target_range, str):
+                try: target_range = json.loads(target_range)
+                except: target_range = {"min": 70, "max": 180} # 파싱 실패 시 기본값
+
+            alert_type = None
+            predicted_value = None
+            if prediction_30min is not None:
+                if prediction_30min < target_range["min"]:
+                    alert_type = "low"
+                    predicted_value = prediction_30min
+                elif prediction_30min > target_range["max"]:
+                    alert_type = "high"
+                    predicted_value = prediction_30min
 
             if alert_type:
-                ten_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
-                recent_alert_query = alert_collection.where('patientId', '==', patient_id) \
-                                        .where('type', '==', alert_type) \
-                                        .where('timestamp', '>=', ten_minutes_ago).limit(1)
-                if len(list(recent_alert_query.stream())) > 0: print(f"  중복 알림 방지({alert_type})"); return
+                # 최근 10분 내 동일 타입 알림 확인 (중복 방지)
+                ten_minutes_ago_iso = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+                cursor.execute('''
+                    SELECT 1 FROM alerts
+                    WHERE patientId = ? AND type = ? AND timestamp >= ?
+                    LIMIT 1
+                ''', (patient_id, alert_type, ten_minutes_ago_iso))
+
+                if cursor.fetchone():
+                    print(f"  중복 알림 방지 ({alert_type})")
+                    return
 
                 alert_message = f"30분 후 {alert_type} 혈당({predicted_value}mg/dL) 예측. 현재: {latest_reading_value}mg/dL"
-                new_alert_data = { "patientId": patient_id, "type": alert_type, "predicted_value": predicted_value,
-                                   "current_value": latest_reading_value, "time_window": 30, "message": alert_message,
-                                   "timestamp": firestore.SERVER_TIMESTAMP, "current_reading_timestamp": latest_reading_ts,
-                                   "status": "active", "acknowledged": False }
-                alert_ref = alert_collection.add(new_alert_data)[1]
-                print(f"  Firestore 알림 저장: ID={alert_ref.id}")
+                now_utc_iso = datetime.now(timezone.utc).isoformat()
 
-                # Webex 전송 (담당 의사의 토큰 사용)
-                webex_api_client = get_webex_api_client_for_user(doctor_id)
-                if webex_api_client:
-                    medical_webex_instance = MedicalWebexIntegration(webex_api_client)
-                    doctor_snap = db.collection(PATIENTS_COLLECTION).document(doctor_id).get() # 임시
-                    if doctor_snap.exists:
-                        doctor_info = doctor_snap.to_dict()
-                        recommendation = "..." # 내용 생략
-                        medical_webex_instance.send_glucose_alert(
-                             recipient_email=doctor_info.get("email"), recipient_name=doctor_info.get("name"),
-                             patient_name=patient_info.get("name"), glucose_value=latest_reading_value,
-                             prediction=predicted_value, alert_type=f"{alert_type}_risk", recommendation=f"...",
-                             alert_details_url=f"/dummy/url" # 실제 URL 필요
-                        )
-                        print(f"  Webex 알림 전송 완료 (의사: {doctor_info.get('email')})")
-                    else: print(f"  의사({doctor_id}) 정보 없음, Webex 전송 불가")
-                else: print(f"  의사({doctor_id}) Webex 토큰 없음/만료, Webex 전송 불가")
-            else: print(f"  정상 범위 예측, 알림 생성 안 함")
-        except Exception as e:
-            print(f"!!! _run_prediction_and_alerting_logic 오류 ({patient_id}): {e} !!!")
-            pred_ref.set({'status': 'error', 'error_message': str(e), 'updated_at': firestore.SERVER_TIMESTAMP}, merge=True)
+                cursor.execute('''
+                    INSERT INTO alerts (patientId, type, predicted_value, current_value, time_window, message, timestamp, current_reading_timestamp, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (patient_id, alert_type, predicted_value, latest_reading_value, 30, alert_message, now_utc_iso, latest_reading_ts_iso, 'active'))
+                alert_id = cursor.lastrowid
+                conn.commit() # 여기서 예측 결과와 알림 모두 커밋
+                print(f"  SQLite 알림 저장: ID={alert_id}")
 
+                # Webex 전송 시뮬레이션
+                if doctor_id:
+                    cursor.execute("SELECT email FROM patients WHERE id = ?", (doctor_id,)) # 의사 이메일 조회 (patients 테이블 사용 가정)
+                    doctor_email_row = cursor.fetchone()
+                    if doctor_email_row:
+                         print(f"  [SIM] Webex 알림 전송 시도 (의사: {doctor_email_row['email']}) - 메시지: {alert_message}")
+                    else:
+                         print(f"  의사({doctor_id}) 이메일 정보 없음, Webex 시뮬레이션 불가")
+                else:
+                     print(f"  담당 의사 미지정, Webex 시뮬레이션 불가")
+
+            else:
+                print(f"  정상 범위 예측, 알림 생성 안 함")
+
+        except sqlite3.Error as e:
+            if conn: conn.rollback()
+            print(f"!!! _run_prediction_and_alerting_logic_local 오류 ({patient_id}): {e} !!!")
+        except Exception as e: # 모델 예측 오류 등 다른 예외 처리
+            if conn: conn.rollback()
+            print(f"!!! _run_prediction_and_alerting_logic_local 예상치 못한 오류 ({patient_id}): {e} !!!")
+        finally:
+            if conn: conn.close()
 
 class PredictionResource(Resource):
     def get(self, patient_id):
-        if not db:
-            return {"error": "Database service unavailable"}, 503
+        """환자의 최근 예측 결과 조회 (최근 20개)"""
+        conn = get_db()
+        conn.row_factory = dict_factory
         try:
-            # Firestore에서 해당 환자의 예측 데이터 조회
-            pred_ref = db.collection("users").document(patient_id).collection("predict")
-            docs = pred_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(20).stream()
-
-            predictions = []
-            for doc in docs:
-                data = doc.to_dict()
-                predictions.append({
-                    "timestamp": data.get("timestamp"),
-                    "value": data.get("value"),
-                    "predicted_at": data.get("predicted_at")
-                })
-
+            cursor = conn.cursor()
+            # timestamp는 예측 대상 시점 (미래)
+            cursor.execute('''
+                SELECT * FROM predictions
+                WHERE patientId = ?
+                ORDER BY timestamp DESC
+                LIMIT 20
+            ''', (patient_id,))
+            predictions = cursor.fetchall()
             return {"predictions": predictions}, 200
-
-        except Exception as e:
-            print(f"[PredictionResource.get] Error for patient_id={patient_id}: {e}")
-            return {"error": "Internal server error fetching predictions"}, 500
-
+        except sqlite3.Error as e:
+            print(f"SQLite Error fetching predictions for {patient_id}: {e}")
+            return {"error": "Database error fetching prediction data"}, 500
+        finally:
+            if conn: conn.close()
 
 class AlertResource(Resource):
     def get(self, patient_id):
-        if not db: return {"error": "DB 미연결"}, 503
+        active_only = request.args.get('active_only', default='true', type=str).lower() == 'true'
+        limit = request.args.get('limit', default=10, type=int)
+
+        conn = get_db()
+        conn.row_factory = dict_factory
         try:
-            active_only = request.args.get('active_only', default='true', type=str).lower() == 'true'
-            limit = request.args.get('limit', default=10, type=int)
-            alerts_query = db.collection(ALERTS_COLLECTION).where('patientId', '==', patient_id)
-            if active_only: alerts_query = alerts_query.where('status', '==', 'active')
-            alerts_query = alerts_query.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(limit)
-            docs = alerts_query.stream()
-            alerts_list = []
-            for doc in docs:
-                data = doc.to_dict(); data['id'] = doc.id
-                data['timestamp'] = firestore_timestamp_to_iso(data.get('timestamp'))
-                data['current_reading_timestamp'] = firestore_timestamp_to_iso(data.get('current_reading_timestamp'))
-                alerts_list.append(data)
+            cursor = conn.cursor()
+            base_query = "SELECT * FROM alerts WHERE patientId = ?"
+            params = [patient_id]
+
+            if active_only:
+                base_query += " AND status = ?"
+                params.append('active')
+
+            base_query += " ORDER BY timestamp DESC LIMIT ?"
+            params.append(limit)
+
+            cursor.execute(base_query, tuple(params))
+            alerts_list = cursor.fetchall()
+            # acknowledged 필드를 boolean으로 변환 (선택적)
+            for alert in alerts_list:
+                alert['acknowledged'] = bool(alert.get('acknowledged', 0))
             return {"alerts": alerts_list}, 200
-        except google_exceptions.FailedPrecondition as e:
-             if "index" in str(e).lower(): return {"error": "DB 쿼리 인덱스 필요"}, 400
-             else: raise e
-        except Exception as e:
-            print(f"알림({patient_id}) 조회 오류: {e}")
-            return {"error": "서버 오류 (알림 조회)"}, 500
+        except sqlite3.Error as e:
+            print(f"SQLite Error fetching alerts for {patient_id}: {e}")
+            return {"error": "Database error fetching alert data"}, 500
+        finally:
+            if conn: conn.close()
 
     def put(self, patient_id, alert_id):
-        if not db: return {"error": "DB 미연결"}, 503
+        """알림 상태 업데이트 (확인 처리)"""
         data = request.get_json()
         if not data or ('status' not in data and 'acknowledged' not in data):
-            return {"error": "'status' 또는 'acknowledged' 필수"}, 400
+            return {"error": "Either 'status' or 'acknowledged' field is required"}, 400
+
+        conn = get_db()
+        conn.row_factory = dict_factory
         try:
-            alert_ref = db.collection(ALERTS_COLLECTION).document(alert_id)
-            doc_snap = alert_ref.get()
-            if not doc_snap.exists: return {"error": "알림 없음"}, 404
-            if doc_snap.to_dict().get('patientId') != patient_id: return {"error": "환자 권한 없음"}, 403
+            cursor = conn.cursor()
+            # 알림 존재 및 소유권 확인
+            cursor.execute("SELECT * FROM alerts WHERE id = ? AND patientId = ?", (alert_id, patient_id))
+            alert = cursor.fetchone()
+            if not alert:
+                return {"error": "Alert not found or permission denied"}, 404
 
-            update_data = {}
-            if 'status' in data: update_data['status'] = data['status']
-            if 'acknowledged' in data: update_data['acknowledged'] = data['acknowledged']
+            update_fields = {}
+            if 'status' in data:
+                update_fields['status'] = data['status']
+            # acknowledged 필드는 boolean으로 받아서 0/1로 변환
+            if 'acknowledged' in data:
+                update_fields['acknowledged'] = 1 if data['acknowledged'] else 0
 
-            if update_data:
-                update_data['acknowledged_at'] = firestore.SERVER_TIMESTAMP
-                alert_ref.update(update_data)
-                print(f"알림 업데이트 완료 ({alert_id}): {update_data}")
-                updated_doc = alert_ref.get().to_dict(); updated_doc['id'] = alert_id
-                updated_doc['timestamp'] = firestore_timestamp_to_iso(updated_doc.get('timestamp'))
-                updated_doc['acknowledged_at'] = firestore_timestamp_to_iso(updated_doc.get('acknowledged_at'))
-                return {"message": "알림 업데이트 성공", "alert": updated_doc}, 200
-            else: return {"message": "변경 사항 없음"}, 304
-        except Exception as e:
-             print(f"알림({alert_id}) 업데이트 오류: {e}")
-             return {"error": "서버 오류 (알림 업데이트)"}, 500
+            if update_fields:
+                update_fields['acknowledged_at'] = datetime.now(timezone.utc).isoformat()
+
+                set_clauses = ", ".join([f"{key} = ?" for key in update_fields.keys()])
+                params = list(update_fields.values())
+                params.append(alert_id)
+
+                cursor.execute(f"UPDATE alerts SET {set_clauses} WHERE id = ?", tuple(params))
+                conn.commit()
+                print(f"알림 업데이트 완료 (ID: {alert_id}): {update_fields}")
+
+                # 업데이트된 알림 정보 반환
+                cursor.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,))
+                updated_alert = cursor.fetchone()
+                if updated_alert:
+                    updated_alert['acknowledged'] = bool(updated_alert['acknowledged']) # boolean 변환
+                    return {"message": "Alert updated successfully", "alert": updated_alert}, 200
+                else: # 업데이트 후 조회가 안되는 경우 (드뭄)
+                     return {"message": "Alert updated successfully, but failed to retrieve updated data"}, 200
+            else:
+                return {"message": "No fields to update"}, 304 # Not Modified
+
+        except sqlite3.Error as e:
+            if conn: conn.rollback()
+            print(f"SQLite Error updating alert {alert_id}: {e}")
+            return {"error": "Database error updating alert"}, 500
+        finally:
+            if conn: conn.close()
+
+# --- Webex API 시뮬레이션 리소스 ---
 
 class WebexEmergencyConnect(Resource):
     def post(self):
-        if not db: return {"error": "DB 미연결"}, 503
-        data = request.get_json();
-        if not data or 'patient_id' not in data: return {"error": "patient_id 필수"}, 400
+        data = request.get_json()
         patient_id = data.get('patient_id')
-        requesting_user_id = data.get('requesting_user_id', 'doctor1') # 요청자 ID (의사)
-
-        webex_api_client = get_webex_api_client_for_user(requesting_user_id)
-        if not webex_api_client:
-            auth_url = url_for('webex_auth_initiate', user_id=requesting_user_id, _external=True) if 'webex_auth_initiate' in app.view_functions else None
-            return {"error": "Webex 인증 필요", "reauth_url": auth_url}, 401
-
-        medical_webex_instance = MedicalWebexIntegration(webex_api_client)
-        try:
-            patient_snap = db.collection(PATIENTS_COLLECTION).document(patient_id).get()
-            if not patient_snap.exists: return {"error": "환자 없음"}, 404
-            patient_info = patient_snap.to_dict(); doctor_id = patient_info.get("doctor_id")
-            if not doctor_id: return {"error": "담당 의사 미지정"}, 400
-            doctor_snap = db.collection(PATIENTS_COLLECTION).document(doctor_id).get() # 임시
-            if not doctor_snap.exists: return {"error": f"의사({doctor_id}) 없음"}, 404
-            doctor_info = doctor_snap.to_dict()
-            pred_snap = db.collection(PREDICTIONS_COLLECTION).document(patient_id).get()
-            current_glucose = pred_snap.to_dict().get('current',{}).get('value','N/A') if pred_snap.exists else 'N/A'
-            predicted_glucose = pred_snap.to_dict().get('prediction_30min',{}).get('value','N/A') if pred_snap.exists else 'N/A'
-
-            print(f"Webex 긴급 연결 시도 (사용자 {requesting_user_id})...")
-            session_info = medical_webex_instance.create_emergency_session(
-                patient_email=patient_info.get("email"), patient_name=patient_info.get("name"),
-                glucose_value=current_glucose, prediction=predicted_glucose,
-                doctor_email=doctor_info.get("email") )
-            print(f"Webex 긴급 연결 성공: 세션 ID={session_info.get('id')}")
-            return session_info, 201
-        except Exception as e:
-            print(f"!!! Webex 긴급 연결 실패: {e} !!!")
-            # TODO: Webex API 401 에러 처리 -> 토큰 갱신 실패 시 재인증 유도
-            return {"error": f"Webex 긴급 연결 실패: {str(e)}"}, 500
+        print(f"[SIM] Webex 긴급 연결 요청 받음 (환자: {patient_id})")
+        return {
+            "message": "[SIM] Webex 긴급 연결 성공",
+            "id": f"sim_session_{int(time.time())}",
+            "joinUrl": "https://webex.example.com/simulated_emergency_session"
+        }, 201
 
 class WebexScheduleCheckup(Resource):
     def post(self):
-        if not db: return {"error": "DB 미연결"}, 503
         data = request.get_json()
-        if not data or 'patient_id' not in data or 'start_time' not in data:
-             return {"error": "'patient_id', 'start_time' 필수"}, 400
-        patient_id = data.get('patient_id'); start_time_str = data.get('start_time')
-        requesting_user_id = data.get('requesting_user_id', 'doctor1') # 요청자 ID
+        patient_id = data.get('patient_id')
+        start_time = data.get('start_time')
+        print(f"[SIM] Webex 정기 검진 예약 요청 받음 (환자: {patient_id}, 시간: {start_time})")
+        return {
+            "message": "[SIM] Webex 미팅 예약 성공",
+            "meeting_id": f"sim_meeting_{int(time.time())}",
+            "join_url": "https://webex.example.com/simulated_checkup_meeting"
+        }, 201
 
-        webex_api_client = get_webex_api_client_for_user(requesting_user_id)
-        if not webex_api_client:
-            auth_url = url_for('webex_auth_initiate', user_id=requesting_user_id, _external=True) if 'webex_auth_initiate' in app.view_functions else None
-            return {"error": "Webex 인증 필요", "reauth_url": auth_url}, 401
+class UserWebexStatus(Resource):
+     def get(self, user_id):
+         print(f"[SIM] 사용자({user_id}) Webex 상태 확인 요청 (로컬 모드에서는 항상 연결 안됨)")
+         # 로컬 모드에서는 실제 Webex 연결 상태를 알 수 없으므로 기본값 반환
+         return {"connected": False, "email": None}, 200
 
-        medical_webex_instance = MedicalWebexIntegration(webex_api_client)
+# --- 의료진 대시보드용 API 리소스 (SQLite 사용) ---
+
+class DoctorPatientList(Resource):
+    """ 특정 의사에게 할당된 환자 목록 조회 """
+    def get(self, doctor_id):
+        print(f"의사({doctor_id})의 환자 목록 조회 시도 (SQLite)")
+        conn = get_db()
+        conn.row_factory = dict_factory
+        patients_list = []
         try:
-            datetime.fromisoformat(start_time_str.replace('Z', '+00:00')) # 시간 형식 검증
-            # Firestore에서 환자/의사 정보 조회... (EmergencyConnect와 유사)
-            patient_snap = db.collection(PATIENTS_COLLECTION).document(patient_id).get()
-            if not patient_snap.exists: return {"error": "환자 없음"}, 404
-            patient_info = patient_snap.to_dict(); doctor_id = patient_info.get("doctor_id")
-            if not doctor_id: return {"error": "담당 의사 미지정"}, 400
-            doctor_snap = db.collection(PATIENTS_COLLECTION).document(doctor_id).get() # 임시
-            if not doctor_snap.exists: return {"error": f"의사({doctor_id}) 없음"}, 404
-            doctor_info = doctor_snap.to_dict()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM patients WHERE doctor_id = ?", (doctor_id,))
+            patients = cursor.fetchall()
 
-            print(f"Webex 정기 검진 예약 시도 (사용자 {requesting_user_id})...")
-            meeting_info = medical_webex_instance.schedule_regular_checkup(
-                patient_email=patient_info.get("email"), patient_name=patient_info.get("name"),
-                doctor_email=doctor_info.get("email"), doctor_name=doctor_info.get("name"),
-                start_time=start_time_str, duration_minutes=data.get('duration_minutes', 30),
-                notes=data.get('notes') )
-            print(f"Webex 정기 검진 예약 성공: 미팅 ID={meeting_info.get('id')}")
-            return { "message": "미팅 예약 성공", "meeting_id": meeting_info.get('id'),
-                     "join_url": meeting_info.get('webLink') }, 201
-        except ValueError: return {"error": "잘못된 시간 형식 (ISO 8601 필요)"}, 400
-        except Exception as e:
-             print(f"!!! Webex 정기 검진 예약 실패: {e} !!!")
-             return {"error": f"Webex 미팅 예약 실패: {str(e)}"}, 500
+            # 각 환자의 최신 상태 요약 (여기서는 임시 데이터 사용)
+            for patient_data in patients:
+                 # 실제 최신 혈당, 예측 조회 로직 추가 필요 (glucose_readings, predictions 테이블 쿼리)
+                 patient_data['status'] = random.choice(['normal', 'warning', 'danger']) # 임시
+                 patient_data['lastGlucose'] = random.randint(60, 180) # 임시
+                 patient_data['trend'] = random.choice(['up', 'down', 'stable']) # 임시
+                 patient_data['lastUpdate'] = f"{random.randint(1, 59)}분 전" # 임시
+                 patients_list.append(patient_data)
+
+            print(f"의사({doctor_id}) 환자 {len(patients_list)}명 조회 완료 (SQLite)")
+            return {"patients": patients_list}, 200
+        except sqlite3.Error as e:
+            print(f"SQLite Error fetching patient list for doctor {doctor_id}: {e}")
+            return {"error": "Database error fetching patient list"}, 500
+        finally:
+            if conn: conn.close()
+
+class DoctorAlertList(Resource):
+    """ 특정 의사의 환자들에게 발생한 알림 목록 조회 """
+    def get(self):
+        doctor_id = request.args.get('doctor_id')
+        limit = request.args.get('limit', default=20, type=int)
+        active_only = request.args.get('active_only', default='true', type=str).lower() == 'true'
+
+        if not doctor_id: return {"error": "doctor_id query parameter is required"}, 400
+        print(f"의사({doctor_id}) 알림 목록 조회 시도 (SQLite, limit={limit}, active_only={active_only})")
+
+        conn = get_db()
+        conn.row_factory = dict_factory
+        alerts_list = []
+        try:
+            cursor = conn.cursor()
+            # 1. 해당 의사에게 속한 환자 ID 목록 조회
+            cursor.execute("SELECT id FROM patients WHERE doctor_id = ?", (doctor_id,))
+            patient_rows = cursor.fetchall()
+            patient_ids = [row['id'] for row in patient_rows]
+
+            if not patient_ids:
+                print(f"의사({doctor_id})에게 할당된 환자 없음")
+                return {"alerts": []}, 200
+
+            # 2. 환자 ID 목록을 사용하여 알림 조회
+            # SQLite에서 IN 연산자 사용
+            placeholders = ','.join('?' * len(patient_ids))
+            base_query = f"SELECT a.*, p.name as patientName FROM alerts a JOIN patients p ON a.patientId = p.id WHERE a.patientId IN ({placeholders})"
+            params = list(patient_ids)
+
+            if active_only:
+                base_query += " AND a.status = ?"
+                params.append('active')
+
+            base_query += " ORDER BY a.timestamp DESC LIMIT ?"
+            params.append(limit)
+
+            cursor.execute(base_query, tuple(params))
+            alerts_list = cursor.fetchall()
+            # acknowledged 필드를 boolean으로 변환
+            for alert in alerts_list:
+                alert['acknowledged'] = bool(alert.get('acknowledged', 0))
+
+            print(f"의사({doctor_id}) 알림 {len(alerts_list)}개 조회 완료 (SQLite)")
+            return {"alerts": alerts_list}, 200
+        except sqlite3.Error as e:
+            print(f"SQLite Error fetching alerts for doctor {doctor_id}: {e}")
+            return {"error": "Database error fetching alert list"}, 500
+        finally:
+            if conn: conn.close()
 
 class SeedDemoData(Resource):
+    """로컬 SQLite DB에 데모 데이터 생성"""
     def post(self):
-        if not db: return {"error": "DB 미연결"}, 503
-        print("*** 데모 데이터 Firestore 시딩 시작 ***")
+        print("*** 로컬 SQLite 데모 데이터 시딩 시작 ***")
+        conn = get_db()
         try:
-            # 데모 환자/의사 ID 결정 (환경 변수 우선, 없으면 기본값)
-            patient_demo_id = os.environ.get("DEMO_PATIENT_ID", "patient1")
-            doctor_demo_id = os.environ.get("DEMO_DOCTOR_ID", "doctor1")
+            cursor = conn.cursor()
+            # 데모 환자/의사 ID 결정
+            patient_demo_id = "patient_local_1"
+            doctor_demo_id = "doctor_local_1"
 
-            patient_ref = db.collection(PATIENTS_COLLECTION).document(patient_demo_id)
+            # 의사 데이터 (patients 테이블 사용 가정)
+            cursor.execute('''
+                INSERT OR REPLACE INTO patients (id, name, email, other_data)
+                VALUES (?, ?, ?, ?)
+            ''', (doctor_demo_id, "이지원(로컬)", f"{doctor_demo_id}@example.local", json.dumps({"specialty": "내분비내과"})))
+
+            # 환자 데이터
             patient_data = {
-                "name": "김민수(데모)", "age": 28, "type": "1형 당뇨", "diagnosis_date": "2024-01-01",
-                "doctor_id": doctor_demo_id, "insulin_regimen": "MDI",
-                "target_glucose_range": {"min": 70, "max": 180},
-                "email": os.environ.get("TEST_PATIENT_EMAIL", f"{patient_demo_id}_demo@example.com")
+                "name": "김민수(로컬)", "age": 28, "type": "1형 당뇨",
+                "insulin_regimen": "MDI"
             }
-            patient_ref.set(patient_data)
-            print(f"환자 '{patient_demo_id}' 데이터 생성/덮어쓰기 완료")
+            target_range = {"min": 70, "max": 180}
+            cursor.execute('''
+                INSERT OR REPLACE INTO patients (id, name, doctor_id, email, target_glucose_range, other_data)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (patient_demo_id, patient_data["name"], doctor_demo_id, f"{patient_demo_id}@example.local",
+                  json.dumps(target_range), json.dumps(patient_data)))
+            print(f"환자 '{patient_demo_id}' 및 의사 '{doctor_demo_id}' 데이터 생성/덮어쓰기 완료")
 
-            doctor_ref = db.collection(PATIENTS_COLLECTION).document(doctor_demo_id) # 임시: patients 사용
-            doctor_data = {
-                "name": "이지원(데모)", "specialty": "내분비내과", "hospital": "데모병원",
-                "email": os.environ.get("TEST_DOCTOR_EMAIL", f"{doctor_demo_id}_demo@example.com")
-            }
-            doctor_ref.set(doctor_data)
-            print(f"의사 '{doctor_demo_id}' 데이터 생성/덮어쓰기 완료")
+            # 샘플 혈당 데이터 생성 (기존 데이터 삭제 후 생성)
+            cursor.execute("DELETE FROM glucose_readings WHERE patientId = ?", (patient_demo_id,))
+            print(f"기존 혈당 데이터 삭제 ({patient_demo_id})")
 
-            # 샘플 혈당 데이터 (기존 데이터 삭제 후 생성 또는 추가)
-            print(f"샘플 혈당 데이터 생성 시작 ({patient_demo_id})...")
-            now = datetime.now(timezone.utc); batch = db.batch(); count = 0
-            current_glucose = random.randint(90, 140) # 시작 혈당 랜덤화
-            for i in range(24 * 6): # 최근 12시간 (10분 간격)
-                 timestamp = now - timedelta(minutes=10 * i)
-                 current_glucose = max(40, min(300, current_glucose + random.randint(-8, 8)))
-                 reading_data = {'patientId': patient_demo_id, 'value': current_glucose, 'unit': 'mg/dL',
-                                 'source': 'CGM_Seed', 'timestamp': timestamp }
-                 doc_ref = db.collection(GLUCOSE_COLLECTION).document()
-                 batch.set(doc_ref, reading_data); count += 1
-            batch.commit()
+            now_utc = datetime.now(timezone.utc)
+            count = 0
+            current_glucose = random.randint(90, 140)
+            batch_data = []
+            # 최근 12시간 데이터 (5분 간격)
+            for i in range(12 * 12):
+                 timestamp_utc = now_utc - timedelta(minutes=5 * i)
+                 current_glucose = max(40, min(300, current_glucose + random.randint(-5, 5)))
+                 # 식사/운동 랜덤 추가 (선택적)
+                 meal = random.randint(0, 50) if random.random() < 0.1 else 0
+                 exercise = random.randint(0, 30) if random.random() < 0.05 else 0
+                 batch_data.append((
+                     patient_demo_id, current_glucose, 'mg/dL', 'CGM_Seed',
+                     timestamp_utc.isoformat(), meal, exercise
+                 ))
+                 count += 1
+
+            cursor.executemany('''
+                INSERT INTO glucose_readings (patientId, value, unit, source, timestamp, meal, exercise)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', batch_data)
+            conn.commit()
             print(f"샘플 혈당 데이터 {count}개 생성 완료")
 
             # 초기 예측 트리거
             GlucoseResource()._trigger_prediction_update(patient_demo_id)
 
-            return {"message": f"Demo data seeded successfully for patient '{patient_demo_id}' and doctor '{doctor_demo_id}'!"}, 201
-        except Exception as e:
-            print(f"!!! 데모 데이터 시딩 중 오류: {e} !!!")
-            return {"error": f"Failed to seed demo data: {str(e)}"}, 500
+            return {"message": f"Local demo data seeded successfully for patient '{patient_demo_id}' and doctor '{doctor_demo_id}'!"}, 201
 
-# --- *** 의료진 대시보드용 신규 API 리소스 *** ---
-
-class DoctorPatientList(Resource):
-    """ 특정 의사에게 할당된 환자 목록 조회 """
-    def get(self, doctor_id):
-        if not db: return {"error": "DB 미연결"}, 503
-        print(f"의사({doctor_id})의 환자 목록 조회 시도")
-        patients_list = []
-        try:
-            # 'patients' 컬렉션에서 doctor_id 필드가 일치하는 문서들을 조회
-            # (Firestore에서는 컬렉션 그룹 쿼리나 별도 매핑 구조가 더 효율적일 수 있음)
-            # 여기서는 patients 컬렉션에 doctor_id가 있다고 가정
-            patients_query = db.collection(PATIENTS_COLLECTION) \
-                               .where('doctor_id', '==', doctor_id) \
-                               .stream()
-            
-            # TODO: 환자 상태 요약을 위해 추가 쿼리 필요 (여기서는 기본 정보만 반환)
-            for doc in patients_query:
-                patient_data = doc.to_dict()
-                patient_data['id'] = doc.id # 환자 ID 추가
-                # 프론트엔드가 기대하는 추가 정보 (임시)
-                patient_data['status'] = random.choice(['normal', 'warning', 'danger']) # 임시 상태
-                patient_data['lastGlucose'] = random.randint(60, 180) # 임시 혈당
-                patient_data['trend'] = random.choice(['up', 'down', 'stable']) # 임시 트렌드
-                patient_data['lastUpdate'] = f"{random.randint(1, 59)}분 전" # 임시 시간
-                patients_list.append(patient_data)
-            
-            print(f"의사({doctor_id}) 환자 {len(patients_list)}명 조회 완료")
-            return {"patients": patients_list}, 200
-        except Exception as e:
-            print(f"의사({doctor_id}) 환자 목록 조회 오류: {e}")
-            return {"error": "서버 오류 (환자 목록 조회)"}, 500
+        except sqlite3.Error as e:
+            if conn: conn.rollback()
+            print(f"!!! 로컬 데모 데이터 시딩 중 오류: {e} !!!")
+            return {"error": f"Failed to seed local demo data: {str(e)}"}, 500
+        finally:
+            if conn: conn.close()
 
 
-class DoctorAlertList(Resource):
-    """ 특정 의사의 환자들에게 발생한 알림 목록 조회 """
-    def get(self):
-        if not db: return {"error": "DB 미연결"}, 503
-        doctor_id = request.args.get('doctor_id')
-        limit = request.args.get('limit', default=20, type=int) # 기본 20개
-        active_only = request.args.get('active_only', default='true', type=str).lower() == 'true'
-        
-        if not doctor_id: return {"error": "doctor_id 파라미터 필요"}, 400
-        print(f"의사({doctor_id}) 알림 목록 조회 시도 (limit={limit}, active_only={active_only})")
-        
-        alerts_list = []
-        try:
-            # 1. 해당 의사에게 속한 환자 ID 목록 조회
-            patient_ids = []
-            patients_query = db.collection(PATIENTS_COLLECTION) \
-                               .where('doctor_id', '==', doctor_id) \
-                               .stream()
-            for doc in patients_query:
-                patient_ids.append(doc.id)
-                
-            if not patient_ids:
-                print(f"의사({doctor_id})에게 할당된 환자 없음")
-                return {"alerts": []}, 200 # 환자가 없으면 알림도 없음
-
-            # 2. 환자 ID 목록을 사용하여 알림 조회 (IN 쿼리 - 최대 30개 ID 지원)
-            #    환자가 30명 초과 시 여러 번 쿼리 필요 (여기서는 단순화)
-            if len(patient_ids) > 30:
-                 print(f"경고: 환자 수가 30명 초과({len(patient_ids)}), 일부 알림만 조회될 수 있음.")
-                 patient_ids = patient_ids[:30] # 임시로 30명 제한
-
-            alerts_query = db.collection(ALERTS_COLLECTION) \
-                             .where('patientId', 'in', patient_ids)
-            
-            if active_only:
-                alerts_query = alerts_query.where('status', '==', 'active')
-
-            alerts_query = alerts_query.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(limit)
-            docs = alerts_query.stream()
-            
-            # 환자 이름 정보 미리 로드 (효율성 위해)
-            patient_names = {pid: db.collection(PATIENTS_COLLECTION).document(pid).get().to_dict().get('name', pid) for pid in patient_ids}
-
-            for doc in docs:
-                data = doc.to_dict()
-                data['id'] = doc.id
-                data['patientName'] = patient_names.get(data.get('patientId'), data.get('patientId')) # 환자 이름 추가
-                data['timestamp'] = firestore_timestamp_to_iso(data.get('timestamp'))
-                data['current_reading_timestamp'] = firestore_timestamp_to_iso(data.get('current_reading_timestamp'))
-                alerts_list.append(data)
-            
-            print(f"의사({doctor_id}) 알림 {len(alerts_list)}개 조회 완료")
-            return {"alerts": alerts_list}, 200
-        except google_exceptions.FailedPrecondition as e:
-             if "index" in str(e).lower(): print(f"!!! Firestore 인덱스 필요: {e} !!!"); return {"error": "DB 쿼리 인덱스 필요"}, 400
-             else: raise e
-        except Exception as e:
-            print(f"의사({doctor_id}) 알림 목록 조회 오류: {e}")
-            return {"error": "서버 오류 (알림 목록 조회)"}, 500
-
-
-class UserWebexStatus(Resource):
-     """ 특정 사용자의 Webex 토큰 상태 확인 """
-     def get(self, user_id):
-         if not db: return {"error": "DB 미연결"}, 503
-         print(f"사용자({user_id}) Webex 상태 확인 시도")
-         try:
-            token_data = get_tokens(user_id)
-            is_connected = False
-            user_email = None # TODO: 사용자 이메일 정보 가져오기 (예: patients 컬렉션)
-
-            if token_data:
-                expires_at = token_data.get('expires_at')
-                if expires_at and isinstance(expires_at, datetime):
-                     if expires_at.tzinfo is None: expires_at = expires_at.replace(tzinfo=timezone.utc)
-                     if expires_at > datetime.now(timezone.utc):
-                         is_connected = True
-                         # 연결된 경우 사용자 이메일 정보 가져오기 시도
-                         user_snap = db.collection(PATIENTS_COLLECTION).document(user_id).get() # patients에 의사 정보도 있다고 가정
-                         if user_snap.exists: user_email = user_snap.to_dict().get('email')
-                elif token_data.get('access_token'): # 만료 정보 없어도 토큰 있으면 일단 연결된 것으로 간주
-                     is_connected = True
-                     user_snap = db.collection(PATIENTS_COLLECTION).document(user_id).get()
-                     if user_snap.exists: user_email = user_snap.to_dict().get('email')
-
-            print(f"사용자({user_id}) Webex 상태: {'연결됨' if is_connected else '연결안됨'}")
-            return {"connected": is_connected, "email": user_email}, 200
-         except Exception as e:
-            print(f"사용자({user_id}) Webex 상태 확인 오류: {e}")
-            return {"error": "서버 오류 (Webex 상태 확인)"}, 500
-
-
-# --- API 라우트 등록 (신규 추가) ---
-api.add_resource(DoctorPatientList, '/api/doctors/<string:doctor_id>/patients')
-api.add_resource(DoctorAlertList, '/api/alerts') # doctor_id는 쿼리 파라미터로 받음
-api.add_resource(UserWebexStatus, '/api/users/<string:user_id>/webex_status')
-# TODO: /summary, /sessions 등 필요한 다른 대시보드 API 라우트 추가
 # --- API 라우트 등록 ---
+# 환자 관련
 api.add_resource(PatientResource, '/api/patients/<string:patient_id>')
 api.add_resource(GlucoseResource, '/api/patients/<string:patient_id>/glucose')
 api.add_resource(PredictionResource, '/api/patients/<string:patient_id>/predictions')
 api.add_resource(AlertResource, '/api/patients/<string:patient_id>/alerts', '/api/patients/<string:patient_id>/alerts/<string:alert_id>')
-api.add_resource(WebexEmergencyConnect, '/api/webex/emergency_connect')
-api.add_resource(WebexScheduleCheckup, '/api/webex/schedule_checkup')
-api.add_resource(SeedDemoData, '/api/seed_demo_data')
 api.add_resource(StateResource, '/api/patients/<string:patient_id>/states')
 
-# 서버 상태 확인 엔드포인트
+# Webex 시뮬레이션
+api.add_resource(WebexEmergencyConnect, '/api/webex/emergency_connect')
+api.add_resource(WebexScheduleCheckup, '/api/webex/schedule_checkup')
+api.add_resource(UserWebexStatus, '/api/users/<string:user_id>/webex_status') # Webex 상태 확인 (시뮬레이션)
 
+# 의료진 대시보드 관련
+api.add_resource(DoctorPatientList, '/api/doctors/<string:doctor_id>/patients')
+api.add_resource(DoctorAlertList, '/api/alerts') # doctor_id는 쿼리 파라미터로
 
-# 프론트엔드 제공 라우트
+# 기타
+api.add_resource(SeedDemoData, '/api/seed_demo_data') # 로컬 데이터 생성용
+
+# --- 프론트엔드 파일 서빙 (로컬 테스트용) ---
+# 정적 파일 경로 설정 (프로젝트 구조에 맞게 조정)
+# 예: backend 폴더와 동일한 레벨에 frontend, dashboard-frontend 폴더가 있다고 가정
+STATIC_FOLDER_PATIENT = os.path.abspath('../frontend')
+STATIC_FOLDER_DASHBOARD = os.path.abspath('../dashboard-frontend')
+
 @app.route('/')
-def serve_index():
-    index_path = 'index.html'
-    static_folder = '../frontend'
-    print(f"Serving {index_path} from {static_folder}")
-    try:
-        if not os.path.exists(os.path.join(static_folder, index_path)):
-            raise FileNotFoundError(f"{index_path} 파일이 {static_folder} 폴더에 존재하지 않습니다.")
-        return send_from_directory(static_folder, index_path)
-    except FileNotFoundError as e:
-        print(f"!!! 오류: {e} !!!")
-        return jsonify({"error": f"Frontend file not found: {index_path} in {static_folder}"}), 404
-    except Exception as e:
-        print(f"!!! 오류: {e} !!!")
-        return jsonify({"error": "Internal server error serving frontend"}), 500
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    static_folder = '../frontend/static/'
-    print(f"Serving static file {filename} from {static_folder}")
-    try:
-        if not os.path.exists(os.path.join(static_folder, filename)):
-            raise FileNotFoundError(f"{filename} 파일이 {static_folder} 폴더에 존재하지 않습니다.")
-        return send_from_directory(static_folder, filename)
-    except FileNotFoundError as e:
-        print(f"!!! 오류: {e} !!!")
-        return jsonify({"error": f"Static file not found: {filename} in {static_folder}"}), 404
-    except Exception as e:
-        print(f"!!! 오류: {e} !!!")
-        return jsonify({"error": "Internal server error serving static file"}), 500
+@app.route('/patient') # 환자 앱 접근 경로
+def serve_patient_index():
+    print(f"Serving patient index.html from {STATIC_FOLDER_PATIENT}")
+    if not os.path.exists(os.path.join(STATIC_FOLDER_PATIENT, 'index.html')):
+        return "Error: Patient frontend/index.html not found.", 404
+    return send_from_directory(STATIC_FOLDER_PATIENT, 'index.html')
+
+@app.route('/patient/static/<path:filename>') # 환자 앱 정적 파일
+def serve_patient_static(filename):
+    return send_from_directory(os.path.join(STATIC_FOLDER_PATIENT, 'static'), filename)
+
+@app.route('/dashboard') # 대시보드 접근 경로
+def serve_dashboard_index():
+    print(f"Serving dashboard index.html from {STATIC_FOLDER_DASHBOARD}")
+    if not os.path.exists(os.path.join(STATIC_FOLDER_DASHBOARD, 'index.html')):
+        return "Error: Dashboard dashboard-frontend/index.html not found.", 404
+    return send_from_directory(STATIC_FOLDER_DASHBOARD, 'index.html')
+
+@app.route('/dashboard/static/<path:filename>') # 대시보드 정적 파일
+def serve_dashboard_static(filename):
+     # 대시보드 프론트엔드에 static 폴더가 있는지 확인 필요
+     static_dir = os.path.join(STATIC_FOLDER_DASHBOARD, 'static')
+     if not os.path.isdir(static_dir): # static 폴더가 없다면 dashboard-frontend 루트에서 찾기
+         static_dir = STATIC_FOLDER_DASHBOARD
+     return send_from_directory(static_dir, filename)
+
 
 # --- 메인 실행 ---
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    print(f"Starting server on port {port}...")
+    # 서버 시작 시 데이터베이스 초기화
+    init_db()
 
-    Thread(target=run_prediction_task, daemon=True).start()
-    # Vercel 배포 환경 감지하여 디버그 모드 결정
-    is_vercel = os.environ.get('VERCEL') == '1'
-    # Vercel에서는 debug=False, 로컬에서는 True
-    app.run(host='0.0.0.0', port=port, debug=not is_vercel)
+    # 백그라운드 예측 스레드 시작 (bit_maml.py가 SQLite 지원 시 주석 해제)
+    # print("Starting background prediction task...")
+    # prediction_thread = Thread(target=run_prediction_task, daemon=True)
+    # prediction_thread.start()
+
+    port = int(os.environ.get('PORT', 5000))
+    print(f"Starting local Flask server on http://localhost:{port}")
+    print(f"Patient App accessible at: http://localhost:{port}/patient")
+    print(f"Dashboard App accessible at: http://localhost:{port}/dashboard")
+    print(f"API endpoints available under: http://localhost:{port}/api/...")
+    # 로컬 실행 시 debug=True 사용 (코드 변경 시 자동 재시작)
+    app.run(host='0.0.0.0', port=port, debug=True)
