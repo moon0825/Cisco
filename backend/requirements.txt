@@ -6,3 +6,5 @@ firebase-admin
 google-api-core
 google-cloud-firestore
 apscheduler
+numpy
+
