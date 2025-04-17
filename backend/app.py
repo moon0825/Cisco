@@ -12,31 +12,37 @@ import uuid     # OAuth state 생성용
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.api_core import exceptions as google_exceptions
+import base64 # 추가
+import json   # 추가
 
-# --- Firebase 초기화 ---
-SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") # 환경 변수만 사용
+# --- Firebase 초기화 (Base64 방식) ---
+SERVICE_ACCOUNT_KEY_BASE64 = os.environ.get('FIREBASE_SERVICE_ACCOUNT_BASE64') # 새 환경 변수 이름 사용
 db = None
-try:
-    if not SERVICE_ACCOUNT_KEY_PATH:
-        raise ValueError("GOOGLE_APPLICATION_CREDENTIALS 환경 변수가 설정되지 않았습니다.")
-    # Base64 인코딩된 키 처리 또는 직접 경로 사용 (Vercel 환경 변수 설정 방식에 따라 선택)
-    # 여기서는 경로로 가정 (Vercel에 파일 내용 직접 넣었다면 credential 처리 방식 변경 필요)
-    # 예: key_dict = json.loads(os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_CONTENT'))
-    #     cred = credentials.Certificate(key_dict)
-    if not os.path.exists(SERVICE_ACCOUNT_KEY_PATH):
-         raise FileNotFoundError(f"서비스 계정 키 파일 경로 오류: {SERVICE_ACCOUNT_KEY_PATH}")
 
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH)
-        firebase_admin.initialize_app(cred)
-        print("Firebase Admin SDK 초기화 성공")
-    else:
-        print("Firebase Admin SDK 이미 초기화됨")
-    db = firestore.client()
-    print("Firebase Firestore 클라이언트 생성 및 연결 성공")
-except Exception as e:
-    print(f"!!! Firebase 초기화 중 심각한 오류 발생: {e} !!!")
-    db = None
+if SERVICE_ACCOUNT_KEY_BASE64:
+    try:
+        # Base64 디코딩 및 JSON 파싱
+        print("Base64 서비스 계정 키 디코딩 시도...")
+        key_json_str = base64.b64decode(SERVICE_ACCOUNT_KEY_BASE64).decode('utf-8')
+        key_dict = json.loads(key_json_str) # JSON 문자열을 파이썬 딕셔너리로 변환
+        print("서비스 계정 키 파싱 성공.")
+
+        # 앱 중복 초기화 방지
+        if not firebase_admin._apps:
+            # 파일 경로 대신 딕셔너리를 사용하여 초기화
+            cred = credentials.Certificate(key_dict)
+            firebase_admin.initialize_app(cred)
+            print("Firebase Admin SDK 초기화 성공 (Base64)")
+        else:
+            print("Firebase Admin SDK 이미 초기화됨 (Base64)")
+
+        db = firestore.client()
+        print("Firebase Firestore 클라이언트 생성 및 연결 성공")
+    except Exception as e:
+        print(f"!!! Firebase 초기화 오류 (Base64): {e} !!!")
+        db = None
+else:
+    print("!!! 경고: FIREBASE_SERVICE_ACCOUNT_BASE64 환경 변수가 설정되지 않았습니다. Firestore 기능이 비활성화됩니다. !!!")
 
 # --- Flask 앱 설정 ---
 app = Flask(__name__)
