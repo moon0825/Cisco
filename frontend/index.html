@@ -456,11 +456,17 @@
 
             try {
                 const endpoints = [
-                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}`).catch(e => {console.error('환자 fetch 오류:', e); return {error:e, ok:false, name:'patient'};}),
-                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}/predictions`).catch(e => {console.error('예측 fetch 오류:', e); return {error:e, ok:false, name:'prediction'};}),
-                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}/alerts?active_only=true`).catch(e => {console.error('알림 fetch 오류:', e); return {error:e, ok:false, name:'alert'};}),
-                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}/glucose?hours=${hours}`).catch(e => {console.error('혈당 fetch 오류:', e); return {error:e, ok:false, name:'glucose'};})
-                    // 상태(states) 엔드포인트 호출 제거
+                    // ↓↓↓↓↓↓ 여기 URL 부분을 수정했습니다 ↓↓↓↓↓↓
+                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}`)
+                        .catch(e => {console.error('환자 fetch 오류:', e); return {error:e, ok:false, name:'patient'};}),
+                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}/predictions`)
+                        .catch(e => {console.error('예측 fetch 오류:', e); return {error:e, ok:false, name:'prediction'};}),
+                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}/alerts?active_only=true`)
+                        .catch(e => {console.error('알림 fetch 오류:', e); return {error:e, ok:false, name:'alert'};}),
+                    fetch(`<span class="math-inline">\{backendUrl\}/api/patients/</span>{patientId}/glucose?hours=${hours}`)
+                        .catch(e => {console.error('혈당 fetch 오류:', e); return {error:e, ok:false, name:'glucose'};})
+                    // ↑↑↑↑↑↑ 여기 URL 부분을 수정했습니다 ↑↑↑↑↑↑
+                    // 상태(states) 엔드포인트 호출은 제거된 상태 유지
                 ];
                 const responses = await Promise.all(endpoints);
 
