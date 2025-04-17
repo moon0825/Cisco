@@ -86,9 +86,9 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL","https://127.0.0.1:5371") # 기본�
 CORS(app, origins=[FRONTEND_URL, "http://localhost:5000","*"], supports_credentials=True) # 로컬 및 배포 주소 허용
 api = Api(app)
 # --- Webex OAuth 설정 ---
-WEBEX_CLIENT_ID = "Cabee5256123b2288ac0366718a921391107566503d3e8b10cfd2d1b337f87534"
-WEBEX_CLIENT_SECRET = "e630000f097834614427f412baf32dd398d143fd81b93bf77d35435d25c91d23"
-WEBEX_REDIRECT_URI = "http://127.0.0.1:5371/api/webex/callback"
+WEBEX_CLIENT_ID = os.environ.get('WEBEX_CLIENT_ID')
+WEBEX_CLIENT_SECRET = os.environ.get('WEBEX_CLIENT_SECRET')
+WEBEX_REDIRECT_URI = os.environ.get('WEBEX_REDIRECT_URI')
 WEBEX_AUTHORIZE_URL = "https://webexapis.com/v1/authorize"
 WEBEX_TOKEN_URL = "https://webexapis.com/v1/access_token"
 WEBEX_SCOPES = os.environ.get("WEBEX_SCOPES", "spark-admin:messages_write meeting:schedules_write meeting:schedules_read spark:people_read spark:rooms_write spark:teams_write spark:team_memberships_write" )
