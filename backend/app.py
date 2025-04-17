@@ -345,7 +345,7 @@ class PredictionResource(Resource):
     def get(self, patient_id):
         if not db: return {"error": "Database service unavailable"}, 503
         try:
-            pred_ref = db.collection('predictions').document(patient_id)
+            pred_ref = db.collection('user').document(patient_id)
             doc = pred_ref.get()
             if doc.exists:
                  data = doc.to_dict()
@@ -645,11 +645,36 @@ def status():
 # 프론트엔드 제공 라우트
 @app.route('/')
 def serve_index():
-    # app.py와 같은 폴더에 frontend 폴더가 있고 그 안에 index.html이 있다고 가정
-    # 또는 Vercel에서는 보통 프론트/백엔드를 분리하므로 이 라우트가 필요 없을 수 있음
-    # 여기서는 로컬 테스트를 위해 남겨둠
-    print("Serving index.html")
-    return send_from_directory('.', 'index.html') # 필요시 경로 수정
+    index_path = 'index.html'
+    static_folder = '../frontend'
+    print(f"Serving {index_path} from {static_folder}")
+    try:
+        if not os.path.exists(os.path.join(static_folder, index_path)):
+            raise FileNotFoundError(f"{index_path} 파일이 {static_folder} 폴더에 존재하지 않습니다.")
+        return send_from_directory(static_folder, index_path)
+    except FileNotFoundError as e:
+        print(f"!!! 오류: {e} !!!")
+        return jsonify({"error": f"Frontend file not found: {index_path} in {static_folder}"}), 404
+    except Exception as e:
+        print(f"!!! 오류: {e} !!!")
+        return jsonify({"error": "Internal server error serving frontend"}), 500
+
+
+# --- 정적 파일 제공 라우트 ---
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    static_folder = '../frontend/static'
+    print(f"Serving static file {filename} from {static_folder}")
+    try:
+        if not os.path.exists(os.path.join(static_folder, filename)):
+            raise FileNotFoundError(f"{filename} 파일이 {static_folder} 폴더에 존재하지 않습니다.")
+        return send_from_directory(static_folder, filename)
+    except FileNotFoundError as e:
+        print(f"!!! 오류: {e} !!!")
+        return jsonify({"error": f"Static file not found: {filename} in {static_folder}"}), 404
+    except Exception as e:
+        print(f"!!! 오류: {e} !!!")
+        return jsonify({"error": "Internal server error serving static file"}), 500
 
 # --- 메인 실행 ---
 if __name__ == '__main__':
