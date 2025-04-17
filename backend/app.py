@@ -108,7 +108,7 @@ def firestore_timestamp_to_iso(timestamp):
 class PatientResource(Resource):
     """환자 정보 API"""
     def get(self, patient_id):
-        return {"환자정보 API"}
+        return 500
 
 class GlucoseResource(Resource):
     """혈당 데이터 API"""
