@@ -88,39 +88,37 @@
             color: var(--text-light);
         }
 
-        /* 알림 카드 스타일 */
         #alertCardContainer {
              margin-bottom: 20px;
         }
         .alert-card {
             border-left-width: 4px;
             border-left-style: solid;
-            background-color: #fff8f8; /* 기본값: 위험(danger) */
+            background-color: #fff8f8;
             border-left-color: var(--danger-color);
         }
         .alert-card.alert-warning {
             background-color: #fffbf0;
             border-left-color: var(--warning-color);
         }
-         .alert-card.alert-high { /* 고혈당 위험 */
-            background-color: #fff5f5; /* 약간 다른 빨간색 계열 */
-            border-left-color: #cc0000; /* 더 진한 빨강 */
+        .alert-card.alert-high {
+            background-color: #fff5f5;
+            border-left-color: #cc0000;
         }
 
         .alert-title {
             font-weight: 600;
-            color: var(--danger-color); /* 기본값: 위험(danger) */
+            color: var(--danger-color);
         }
         .alert-card.alert-warning .alert-title {
             color: var(--warning-color);
         }
         .alert-card.alert-high .alert-title {
-            color: #cc0000; /* 더 진한 빨강 */
+            color: #cc0000;
         }
         .alert-card .alert-icon {
              margin-right: 8px;
         }
-
 
         .btn-emergency {
             background-color: var(--danger-color);
@@ -128,7 +126,7 @@
             border-radius: 50px;
             padding: 10px 20px;
             font-weight: 600;
-            color: white; /* 흰색 텍스트 */
+            color: white;
         }
 
         .btn-emergency:hover {
@@ -186,7 +184,7 @@
         .nav-link i { font-size: 1.5rem; margin-bottom: 4px; }
         .nav-link.active { color: var(--primary-color); }
 
-        .chart-container { height: 250px; margin: 20px 0; } /* 높이 조절 */
+        .chart-container { height: 250px; margin: 20px 0; }
 
         .time-selector { display: flex; justify-content: space-between; margin-bottom: 15px; }
         .time-btn { flex: 1; text-align: center; padding: 8px; background-color: white; border: 1px solid #e0e0e0; color: var(--text-light); font-weight: 500; cursor: pointer; }
@@ -203,9 +201,8 @@
         .modal-header { border-bottom: 1px solid rgba(0, 0, 0, 0.05); }
         .modal-title { font-weight: 600; }
 
-        .webex-logo { height: 24px; margin-right: 8px; vertical-align: middle; } /* vertical-align 추가 */
+        .webex-logo { height: 24px; margin-right: 8px; vertical-align: middle; }
 
-        /* 로딩 화면 스타일 */
         .loading-container {
             position: fixed;
             top: 0;
@@ -213,14 +210,14 @@
             width: 100%;
             height: 100%;
             background-color: rgba(255, 255, 255, 0.9);
-            display: none; /* 기본 숨김 */
+            display: none;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             z-index: 2000;
         }
         .loading-container.active {
-            display: flex; /* active 클래스가 붙으면 보이도록 */
+            display: flex;
         }
         .spinner-border { width: 3rem; height: 3rem; color: var(--primary-color); }
         .loading-text { margin-top: 20px; font-weight: 600; color: var(--primary-color); }
@@ -237,7 +234,7 @@
     <nav class="navbar navbar-light">
         <div class="container">
             <a class="navbar-brand" href="#">
-                 <img src="/static/webex_logo.png" alt="Webex Logo" class="webex-logo">
+                <img src="static/webex_logo.png" alt="Webex Logo" class="webex-logo">
                 pGluc-Webex
             </a>
             <div>
@@ -259,7 +256,8 @@
                     <div class="glucose-value" id="currentGlucoseValue">--</div>
                     <div class="glucose-unit">mg/dL</div>
                     <div class="glucose-trend" id="currentGlucoseTrend">
-                        <i class="bi bi-dash"></i> </div>
+                        <i class="bi bi-dash"></i>
+                    </div>
                 </div>
                 <div class="mt-3">
                     <div class="progress" style="height: 8px;">
@@ -290,7 +288,7 @@
                         <div class="prediction-time">60분 후</div>
                         <div class="prediction-value"><span id="predictionValue60">--</span> <span class="glucose-unit">mg/dL</span></div>
                         <div class="glucose-trend" id="predictionTrend60">
-                             <i class="bi bi-dash"></i>
+                            <i class="bi bi-dash"></i>
                         </div>
                     </div>
                 </div>
@@ -303,7 +301,8 @@
         </div>
 
         <div class="d-grid gap-2 mb-4">
-            <button class="btn btn-emergency btn-lg" id="emergencyBtn"> <i class="bi bi-camera-video-fill"></i> 긴급 원격 진료 연결
+            <button class="btn btn-emergency btn-lg" id="emergencyBtn">
+                <i class="bi bi-camera-video-fill"></i> 긴급 원격 진료 연결
             </button>
         </div>
 
@@ -311,7 +310,7 @@
             <div class="card alert-card alert-warning" style="display: none;" id="alertCardTemplate">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-bell-fill alert-icon"></i>최근 알림</span>
-                     <button type="button" class="btn-close" aria-label="Close" onclick="dismissAlert(this)"></button>
+                    <button type="button" class="btn-close" aria-label="Close" onclick="dismissAlert(this)"></button>
                 </div>
                 <div class="card-body">
                     <h5 class="alert-title">
@@ -322,11 +321,10 @@
                         <button class="btn btn-sm btn-action ack-button">
                             <i class="bi bi-check-circle"></i> 확인 완료
                         </button>
-                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-
 
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -337,6 +335,32 @@
             </div>
             <div class="card-body p-0" id="recentLogsContainer">
                 <div class="log-item text-center text-muted p-3">기록 로딩 중...</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-clipboard-data"></i> 상태 입력
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="stateInput" class="form-label">상태</label>
+                    <input type="text" class="form-control" id="stateInput" placeholder="예: 정상, 식후">
+                </div>
+                <div class="mb-3">
+                    <label for="mealInput" class="form-label">식사량 (g)</label>
+                    <input type="number" class="form-control" id="mealInput" placeholder="예: 50">
+                </div>
+                <button class="btn btn-action" onclick="submitState()">상태 입력</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list-ul"></i> 최근 상태 기록
+            </div>
+            <div class="card-body p-0" id="stateLogsContainer">
+                <div class="log-item text-center text-muted p-3">상태 기록 로딩 중...</div>
             </div>
         </div>
     </div>
@@ -357,7 +381,7 @@
                     <canvas id="glucoseChart"></canvas>
                 </div>
                 <div class="d-flex justify-content-between mt-3 text-center">
-                     <div>
+                    <div>
                         <div class="text-muted small">최저 혈당</div>
                         <div class="fw-bold" id="chartMinGlucose">--</div>
                     </div>
@@ -365,7 +389,7 @@
                         <div class="text-muted small">평균 혈당</div>
                         <div class="fw-bold" id="chartAvgGlucose">--</div>
                     </div>
-                     <div>
+                    <div>
                         <div class="text-muted small">최고 혈당</div>
                         <div class="fw-bold" id="chartMaxGlucose">--</div>
                     </div>
@@ -376,7 +400,7 @@
                 </div>
             </div>
         </div>
-        </div>
+    </div>
 
     <div class="container mt-4" id="logContent" style="display: none;">
         <div class="card">
@@ -410,7 +434,8 @@
             </a>
         </div>
         <div class="col nav-item">
-            <a class="nav-link" href="#" id="settingsBtn"> <i class="bi bi-gear"></i>
+            <a class="nav-link" href="#" id="settingsBtn">
+                <i class="bi bi-gear"></i>
                 설정
             </a>
         </div>
@@ -419,11 +444,11 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        const patientId = 'patient1'; // 데모용 환자 ID
-        const backendUrl = 'https://cisco-ejsn.vercel.app'; // 'https://' 를 추가하세요!
-        let glucoseChartInstance = null; // 차트 인스턴스 저장 변수
-        let currentPatientData = {}; // 환자 정보 저장 변수
-        let currentChartHours = 3; // 현재 차트 시간 범위
+        const patientId = 'kimjaehoug';
+        const backendUrl = 'https://cisco-ejsn.vercel.app';
+        let glucoseChartInstance = null;
+        let currentPatientData = {};
+        let currentChartHours = 3;
 
         // --- DOM 요소 ---
         const loadingOverlay = document.getElementById('loadingOverlay');
@@ -444,13 +469,13 @@
         const recentLogsContainerEl = document.getElementById('recentLogsContainer');
         const allLogsContainerEl = document.getElementById('allLogsContainer');
         const logDateFilterEl = document.getElementById('logDateFilter');
+        const stateLogsContainerEl = document.getElementById('stateLogsContainer');
 
         const homeContent = document.getElementById('homeContent');
         const chartContent = document.getElementById('chartContent');
         const logContent = document.getElementById('logContent');
         const bottomNavLinks = document.querySelectorAll('.bottom-nav .nav-link');
         const timeSelectorBtns = document.querySelectorAll('.time-selector .time-btn');
-
 
         // --- 로딩 함수 ---
         function showLoading(message = '로딩 중...') {
@@ -464,94 +489,88 @@
         // --- 트렌드 아이콘 및 클래스 반환 함수 ---
         function getTrendInfo(currentValue, previousValue) {
             if (previousValue === null || previousValue === undefined || currentValue === previousValue) {
-                return { icon: 'bi-dash', class: 'trend-stable', change: 0 }; // 안정
+                return { icon: 'bi-dash', class: 'trend-stable', change: 0 };
             }
             const diff = currentValue - previousValue;
-            if (diff > 5) return { icon: 'bi-arrow-up', class: 'trend-up', change: diff }; // 상승
-            if (diff < -5) return { icon: 'bi-arrow-down', class: 'trend-down', change: diff }; // 하락
-            return { icon: 'bi-arrow-right', class: 'trend-stable', change: diff }; // 안정 (약간 변화)
+            if (diff > 5) return { icon: 'bi-arrow-up', class: 'trend-up', change: diff };
+            if (diff < -5) return { icon: 'bi-arrow-down', class: 'trend-down', change: diff };
+            return { icon: 'bi-arrow-right', class: 'trend-stable', change: diff };
         }
 
         // --- UI 업데이트 함수 ---
         function updatePatientInfoUI(patientData) {
-             currentPatientData = patientData; // 전역 변수에 저장
-             patientNameEl.innerText = patientData.name || '환자 정보 없음';
-             if (patientData.target_glucose_range) {
+            currentPatientData = patientData;
+            patientNameEl.innerText = patientData.name || '환자 정보 없음';
+            if (patientData.target_glucose_range) {
                 minTargetGlucoseEl.innerText = `${patientData.target_glucose_range.min} mg/dL`;
                 maxTargetGlucoseEl.innerText = `${patientData.target_glucose_range.max} mg/dL`;
-             }
+            }
         }
 
-        function updatePredictionUI(data) {
-            if (!data || !data.current) {
-                 console.warn("Invalid prediction data received");
-                 return;
+        function updatePredictionUI(predictions) {
+            if (!predictions || predictions.length < 3) {
+                console.warn("Invalid prediction data received");
+                currentGlucoseValueEl.innerText = '데이터 없음';
+                predictionValue30El.innerText = '데이터 없음';
+                predictionValue60El.innerText = '데이터 없음';
+                return;
             }
-
-            const currentVal = data.current.value;
-            const pred30Val = data.prediction_30min.value;
-            const pred60Val = data.prediction_60min.value;
+            const sortedPredictions = predictions.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            const currentVal = sortedPredictions[0].value;
+            const pred30Val = sortedPredictions[1].value;
+            const pred60Val = sortedPredictions[2].value;
 
             currentGlucoseValueEl.innerText = currentVal;
             predictionValue30El.innerText = pred30Val;
             predictionValue60El.innerText = pred60Val;
 
-            // 마지막 업데이트 시간 표시 (Moment.js 사용)
-            if (data.updated_at) {
-                lastUpdateTimeEl.innerText = `업데이트: ${moment(data.updated_at).fromNow()}`;
+            if (sortedPredictions[0].timestamp) {
+                lastUpdateTimeEl.innerText = `업데이트: ${moment(sortedPredictions[0].timestamp).fromNow()}`;
             }
 
-            // 현재 혈당 트렌드 계산 (이전 예측 데이터 필요 - 간단히 이전 값과 비교)
-            // TODO: 더 정확한 트렌드 계산 로직 필요 (예: 이전 fetch 결과 저장)
-            const trendInfoCurrent = getTrendInfo(currentVal, null); // 이전 값 없으므로 임시 처리
+            const trendInfoCurrent = getTrendInfo(currentVal, null);
             currentGlucoseTrendEl.innerHTML = `<i class="bi ${trendInfoCurrent.icon}"></i>`;
             currentGlucoseTrendEl.className = `glucose-trend ${trendInfoCurrent.class}`;
 
-            // 30분 후 예측 트렌드
             const trendInfo30 = getTrendInfo(pred30Val, currentVal);
             predictionTrend30El.innerHTML = `<i class="bi ${trendInfo30.icon}"></i> ${trendInfo30.change >= 0 ? '+' : ''}${trendInfo30.change}`;
             predictionTrend30El.className = `glucose-trend ${trendInfo30.class}`;
 
-            // 60분 후 예측 트렌드
             const trendInfo60 = getTrendInfo(pred60Val, pred30Val);
             predictionTrend60El.innerHTML = `<i class="bi ${trendInfo60.icon}"></i> ${trendInfo60.change >= 0 ? '+' : ''}${trendInfo60.change}`;
             predictionTrend60El.className = `glucose-trend ${trendInfo60.class}`;
 
-             // 프로그레스 바 업데이트
             if (currentPatientData.target_glucose_range) {
                 const minTarget = currentPatientData.target_glucose_range.min;
                 const maxTarget = currentPatientData.target_glucose_range.max;
-                let progressPercent = ((currentVal - 40) / (260)) * 100; // 40 ~ 300 범위 기준
-                progressPercent = Math.max(0, Math.min(100, progressPercent)); // 0~100% 제한
+                let progressPercent = ((currentVal - 40) / (260)) * 100;
+                progressPercent = Math.max(0, Math.min(100, progressPercent));
 
                 glucoseProgressBarEl.style.width = `${progressPercent}%`;
-
-                // 프로그레스 바 색상 변경
                 glucoseProgressBarEl.classList.remove('bg-success', 'bg-warning', 'bg-danger');
                 if (currentVal < minTarget) {
-                    glucoseProgressBarEl.classList.add('bg-warning'); // 저혈당 경고
+                    glucoseProgressBarEl.classList.add('bg-warning');
                 } else if (currentVal > maxTarget) {
-                     glucoseProgressBarEl.classList.add('bg-danger'); // 고혈당 위험
+                    glucoseProgressBarEl.classList.add('bg-danger');
                 } else {
-                    glucoseProgressBarEl.classList.add('bg-success'); // 정상 범위
+                    glucoseProgressBarEl.classList.add('bg-success');
                 }
             }
         }
 
         function updateAlertUI(alerts) {
-            alertCardContainerEl.innerHTML = ''; // 기존 알림 지우기
+            alertCardContainerEl.innerHTML = '';
             if (alerts && alerts.length > 0) {
-                const latestAlert = alerts[0]; // 가장 최신 알림만 표시 (활성 알림 기준)
-
+                const latestAlert = alerts[0];
                 const alertCard = alertCardTemplateEl.cloneNode(true);
-                alertCard.style.display = 'block'; // 보이도록 설정
-                alertCard.id = `alert-${latestAlert.id}`; // 고유 ID 설정
+                alertCard.style.display = 'block';
+                alertCard.id = `alert-${latestAlert.id}`;
 
                 const titleText = alertCard.querySelector('.alertTitleText');
                 const messageText = alertCard.querySelector('.alertMessageText');
-                const alertIcon = alertCard.querySelectorAll('.alert-icon'); // title과 header의 아이콘 모두 선택
+                const alertIcon = alertCard.querySelectorAll('.alert-icon');
 
-                alertCard.classList.remove('alert-warning', 'alert-danger', 'alert-high'); // 기존 클래스 제거
+                alertCard.classList.remove('alert-warning', 'alert-danger', 'alert-high');
                 let titlePrefix = '';
                 let iconClass = '';
 
@@ -560,179 +579,212 @@
                     titlePrefix = '저혈당 위험 감지';
                     iconClass = 'bi-exclamation-triangle-fill';
                 } else if (latestAlert.type === 'high') {
-                    alertCard.classList.add('alert-high'); // 고혈당 스타일 적용
+                    alertCard.classList.add('alert-high');
                     titlePrefix = '고혈당 위험 감지';
-                     iconClass = 'bi-exclamation-octagon-fill';
+                    iconClass = 'bi-exclamation-octagon-fill';
                 } else {
-                     alertCard.classList.add('alert-secondary'); // 기타 알림 (필요시)
-                     titlePrefix = '알림';
-                     iconClass = 'bi-info-circle-fill';
+                    alertCard.classList.add('alert-secondary');
+                    titlePrefix = '알림';
+                    iconClass = 'bi-info-circle-fill';
                 }
 
                 titleText.innerText = titlePrefix;
                 messageText.innerText = latestAlert.message || '상세 정보 없음';
-                alertIcon.forEach(icon => { // 모든 아이콘 변경
+                alertIcon.forEach(icon => {
                     icon.className = `alert-icon bi ${iconClass}`;
                 });
 
-
-                // 확인 버튼 이벤트 리스너
                 const ackButton = alertCard.querySelector('.ack-button');
-                 ackButton.onclick = () => acknowledgeAlert(latestAlert.id);
+                ackButton.onclick = () => acknowledgeAlert(latestAlert.id);
 
                 alertCardContainerEl.appendChild(alertCard);
             }
         }
 
-         async function acknowledgeAlert(alertId) {
+        async function acknowledgeAlert(alertId) {
             console.log(`알림 확인 시도: ${alertId}`);
             showLoading('알림 확인 중...');
-             try {
+            try {
                 const response = await fetch(`${backendUrl}/api/patients/${patientId}/alerts/${alertId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ acknowledged: true, status: 'acknowledged' }) // 상태도 변경
+                    body: JSON.stringify({ acknowledged: true, status: 'acknowledged' })
                 });
-                if (response.ok || response.status === 304) { // 304 Not Modified도 성공으로 간주
+                if (response.ok || response.status === 304) {
                     console.log(`알림 확인 완료: ${alertId}`);
-                    // UI에서 해당 알림 카드 제거 또는 비활성화
                     const alertCard = document.getElementById(`alert-${alertId}`);
                     if (alertCard) {
-                        alertCard.style.opacity = '0.5'; // 흐리게 처리
+                        alertCard.style.opacity = '0.5';
                         alertCard.querySelector('.ack-button').disabled = true;
                         alertCard.querySelector('.ack-button').innerText = '확인됨';
-                        // 또는 alertCard.remove(); 로 완전히 제거
-                        setTimeout(() => alertCard.remove(), 1000); // 1초 후 제거
+                        setTimeout(() => alertCard.remove(), 1000);
                     }
-                     // 알림 목록 다시 로드
-                    // fetchData(); // 바로 다시 로드하면 깜빡일 수 있으므로 UI처리만 할 수도 있음
                 } else {
                     const errorResult = await response.json();
                     alert(`알림 확인 실패: ${errorResult.error}`);
                 }
             } catch (error) {
-                 console.error('알림 확인 오류:', error);
-                 alert('알림 확인 중 오류 발생');
+                console.error('알림 확인 오류:', error);
+                alert('알림 확인 중 오류 발생');
             } finally {
-                 hideLoading();
+                hideLoading();
             }
         }
 
-         function dismissAlert(closeButton) {
-             // X 버튼 클릭 시 카드 제거 (API 호출 없이 UI만)
+        function dismissAlert(closeButton) {
             const card = closeButton.closest('.alert-card');
-             if (card) {
+            if (card) {
                 card.remove();
             }
         }
 
-
         function updateRecentLogsUI(readings) {
-            recentLogsContainerEl.innerHTML = ''; // 기존 로그 지우기
-             if (!readings || readings.length === 0) {
+            recentLogsContainerEl.innerHTML = '';
+            if (!readings || readings.length === 0) {
                 recentLogsContainerEl.innerHTML = '<div class="log-item text-center text-muted p-3">최근 기록이 없습니다.</div>';
                 return;
             }
 
-            // 최신 3개 기록만 표시 (시간 역순으로)
             const recentReadings = readings.slice().reverse().slice(0, 3);
-
             recentReadings.forEach(reading => {
                 const logDiv = document.createElement('div');
                 logDiv.className = 'log-item d-flex justify-content-between align-items-center';
                 logDiv.innerHTML = `
                     <div>
                         <div class="log-time">${moment(reading.timestamp).format('HH:mm')}</div>
-                        <div class="log-value">${reading.value} ${reading.unit || 'mg/dL'}</div>
+                        <div class="log-value">${reading.glucose} mg/dL</div>
                     </div>
-                    <span class="log-source">${reading.source || 'Unknown'}</span>
+                    <span class="log-source">${reading.source || 'CGM'}</span>
                 `;
                 recentLogsContainerEl.appendChild(logDiv);
             });
         }
 
-         function updateAllLogsUI(readings) {
-            allLogsContainerEl.innerHTML = ''; // 기존 로그 지우기
+        function updateAllLogsUI(readings) {
+            allLogsContainerEl.innerHTML = '';
             if (!readings || readings.length === 0) {
                 allLogsContainerEl.innerHTML = '<div class="log-item text-center text-muted p-3">선택된 날짜의 기록이 없습니다.</div>';
                 return;
             }
 
-             // 시간 역순으로 표시
             readings.slice().reverse().forEach(reading => {
                 const logDiv = document.createElement('div');
                 logDiv.className = 'log-item d-flex justify-content-between align-items-center';
                 logDiv.innerHTML = `
                     <div>
                         <div class="log-time">${moment(reading.timestamp).format('YYYY-MM-DD HH:mm')}</div>
-                        <div class="log-value">${reading.value} ${reading.unit || 'mg/dL'}</div>
+                        <div class="log-value">${reading.glucose} mg/dL</div>
                     </div>
-                    <span class="log-source">${reading.source || 'Unknown'}</span>
+                    <span class="log-source">${reading.source || 'CGM'}</span>
                 `;
                 allLogsContainerEl.appendChild(logDiv);
             });
         }
 
+        function updateStateLogsUI(states) {
+            stateLogsContainerEl.innerHTML = '';
+            if (!states || states.length === 0) {
+                stateLogsContainerEl.innerHTML = '<div class="log-item text-center text-muted p-3">최근 상태 기록이 없습니다.</div>';
+                return;
+            }
 
-        // --- 차트 업데이트 함수 ---
+            states.slice().reverse().forEach(state => {
+                const logDiv = document.createElement('div');
+                logDiv.className = 'log-item d-flex justify-content-between align-items-center';
+                logDiv.innerHTML = `
+                    <div>
+                        <div class="log-time">${moment(state.time).format('YYYY-MM-DD HH:mm')}</div>
+                        <div class="log-value">${state.state}</div>
+                    </div>
+                    <span class="log-source">식사량: ${state.meal}g</span>
+                `;
+                stateLogsContainerEl.appendChild(logDiv);
+            });
+        }
+
         function updateChart(readings, hours = 3) {
             if (!readings || readings.length === 0) {
-                 console.warn("차트에 표시할 데이터가 없습니다.");
-                 // 기존 차트 클리어 또는 메시지 표시
+                console.warn("차트에 표시할 데이터가 없습니다.");
                 if (glucoseChartInstance) {
-                     glucoseChartInstance.destroy();
-                     glucoseChartInstance = null;
-                     // 통계 정보 초기화
-                     document.getElementById('chartMinGlucose').innerText = '--';
-                     document.getElementById('chartAvgGlucose').innerText = '--';
-                     document.getElementById('chartMaxGlucose').innerText = '--';
-                     document.getElementById('chartTargetRange').innerText = '--%';
+                    glucoseChartInstance.destroy();
+                    glucoseChartInstance = null;
+                    document.getElementById('chartMinGlucose').innerText = '--';
+                    document.getElementById('chartAvgGlucose').innerText = '--';
+                    document.getElementById('chartMaxGlucose').innerText = '--';
+                    document.getElementById('chartTargetRange').innerText = '--%';
                 }
                 return;
-             }
+            }
 
             const ctx = document.getElementById('glucoseChart').getContext('2d');
             const labels = readings.map(r => r.timestamp);
-            const dataPoints = readings.map(r => r.value);
+            const dataPoints = readings.map(r => r.glucose);
 
-             // 통계 계산
-             const values = dataPoints.filter(v => v !== null && v !== undefined);
-             const minVal = values.length > 0 ? Math.min(...values) : null;
-             const maxVal = values.length > 0 ? Math.max(...values) : null;
-             const avgVal = values.length > 0 ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null;
+            const values = dataPoints.filter(v => v !== null && v !== undefined);
+            const minVal = values.length > 0 ? Math.min(...values) : null;
+            const maxVal = values.length > 0 ? Math.max(...values) : null;
+            const avgVal = values.length > 0 ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null;
 
-             let inRangeCount = 0;
-             const minTarget = currentPatientData.target_glucose_range?.min || 70;
-             const maxTarget = currentPatientData.target_glucose_range?.max || 180;
-             if (values.length > 0) {
-                 inRangeCount = values.filter(v => v >= minTarget && v <= maxTarget).length;
-             }
-             const targetRangePercent = values.length > 0 ? Math.round((inRangeCount / values.length) * 100) : 0;
+            let inRangeCount = 0;
+            const minTarget = currentPatientData.target_glucose_range?.min || 70;
+            const maxTarget = currentPatientData.target_glucose_range?.max || 180;
+            if (values.length > 0) {
+                inRangeCount = values.filter(v => v >= minTarget && v <= maxTarget).length;
+            }
+            const targetRangePercent = values.length > 0 ? Math.round((inRangeCount / values.length) * 100) : 0;
 
-            // 통계 UI 업데이트
             document.getElementById('chartMinGlucose').innerText = minVal !== null ? `${minVal} mg/dL` : '--';
             document.getElementById('chartAvgGlucose').innerText = avgVal !== null ? `${avgVal} mg/dL` : '--';
             document.getElementById('chartMaxGlucose').innerText = maxVal !== null ? `${maxVal} mg/dL` : '--';
             document.getElementById('chartTargetRange').innerText = `${targetRangePercent}%`;
 
-
-            // 차트 데이터 구성
             const chartData = {
                 labels: labels,
-                datasets: [{
-                    label: '혈당 (mg/dL)',
-                    data: dataPoints,
-                    borderColor: 'rgb(0, 82, 204)',
-                    backgroundColor: 'rgba(0, 82, 204, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.3, // 곡선 부드럽게
-                    fill: true, // 영역 채우기
-                    pointRadius: 1, // 데이터 포인트 크기
-                    pointHoverRadius: 5
-                }]
+                datasets: [
+                    {
+                        label: '혈당 (mg/dL)',
+                        data: dataPoints,
+                        borderColor: 'rgb(0, 82, 204)',
+                        backgroundColor: 'rgba(0, 82, 204, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 1,
+                        pointHoverRadius: 5
+                    },
+                    {
+                        label: '예측 혈당 (mg/dL)',
+                        data: [],
+                        borderColor: 'rgb(255, 165, 0)',
+                        borderWidth: 1.5,
+                        borderDash: [10, 10],
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
             };
 
-            // 차트 옵션 구성
+            async function fetchPredictionsForChart() {
+                try {
+                    const response = await fetch(`${backendUrl}/api/patients/${patientId}/predictions`);
+                    if (!response.ok) throw new Error(`예측 데이터 조회 실패: ${response.status}`);
+                    const data = await response.json();
+                    const predictions = data.predictions.map(p => ({
+                        x: p.timestamp,
+                        y: p.value
+                    }));
+                    chartData.datasets[1].data = predictions;
+                    if (glucoseChartInstance) {
+                        glucoseChartInstance.data = chartData;
+                        glucoseChartInstance.update();
+                    }
+                } catch (error) {
+                    console.error('예측 데이터 조회 오류:', error);
+                }
+            }
+
+            fetchPredictionsForChart();
+
             const config = {
                 type: 'line',
                 data: chartData,
@@ -743,131 +795,169 @@
                         x: {
                             type: 'time',
                             time: {
-                                unit: hours <= 6 ? 'hour' : 'day', // 시간 범위에 따라 단위 조절
+                                unit: hours <= 6 ? 'hour' : 'day',
                                 displayFormats: {
-                                     hour: 'HH:mm',
-                                     day: 'MM/DD'
+                                    hour: 'HH:mm',
+                                    day: 'MM/DD'
                                 }
                             },
                             title: { display: true, text: '시간' }
                         },
                         y: {
-                            beginAtZero: false, // 0부터 시작 안 함
+                            beginAtZero: false,
                             title: { display: true, text: '혈당 (mg/dL)' },
-                             suggestedMin: 40, // y축 최소 제안
-                             suggestedMax: 250 // y축 최대 제안
+                            suggestedMin: 40,
+                            suggestedMax: 250
                         }
                     },
-                     plugins: {
+                    plugins: {
                         tooltip: {
                             mode: 'index',
                             intersect: false,
                         },
-                        annotation: { // 목표 범위 표시 (chartjs-plugin-annotation 필요 - 여기서는 기본 기능만 사용)
-                             annotations: {
+                        annotation: {
+                            annotations: {
                                 line1: {
                                     type: 'line',
                                     yMin: minTarget,
                                     yMax: minTarget,
-                                    borderColor: 'rgba(247, 168, 0, 0.5)', // warning color
+                                    borderColor: 'rgba(247, 168, 0, 0.5)',
                                     borderWidth: 1,
-                                     borderDash: [5, 5],
-                                     label: { content: `저혈당 경계 (${minTarget})`, enabled: true, position: 'start', font: {size: 10} }
+                                    borderDash: [5, 5],
+                                    label: { content: `저혈당 경계 (${minTarget})`, enabled: true, position: 'start', font: {size: 10} }
                                 },
-                                 line2: {
+                                line2: {
                                     type: 'line',
                                     yMin: maxTarget,
                                     yMax: maxTarget,
-                                    borderColor: 'rgba(233, 79, 55, 0.5)', // danger color
+                                    borderColor: 'rgba(233, 79, 55, 0.5)',
                                     borderWidth: 1,
-                                     borderDash: [5, 5],
-                                     label: { content: `고혈당 경계 (${maxTarget})`, enabled: true, position: 'start', font: {size: 10} }
+                                    borderDash: [5, 5],
+                                    label: { content: `고혈당 경계 (${maxTarget})`, enabled: true, position: 'start', font: {size: 10} }
                                 }
-                             }
+                            }
                         }
                     }
                 }
             };
 
-            // 기존 차트가 있으면 파괴 후 다시 생성
             if (glucoseChartInstance) {
                 glucoseChartInstance.destroy();
             }
             glucoseChartInstance = new Chart(ctx, config);
         }
 
-
-        // --- 데이터 로딩 함수 ---
         async function fetchData(hours = 3) {
             showLoading('데이터 로딩 중...');
             let predictionData = null;
             let alertData = null;
             let glucoseData = null;
             let patientData = null;
+            let stateData = null;
 
             try {
-                 // 병렬로 API 호출
-                 const [patientRes, predictionRes, alertRes, glucoseRes] = await Promise.all([
-                    fetch(`${backendUrl}/api/patients/${patientId}`),
-                    fetch(`${backendUrl}/api/patients/${patientId}/predictions`),
-                    fetch(`${backendUrl}/api/patients/${patientId}/alerts?active_only=true`),
-                    fetch(`${backendUrl}/api/patients/${patientId}/glucose?hours=${hours}`)
-                 ]);
+                const [patientRes, predictionRes, alertRes, glucoseRes, stateRes] = await Promise.all([
+                    fetch(`${backendUrl}/api/patients/${patientId}`).catch(err => { console.error('환자 데이터 오류:', err); return null; }),
+                    fetch(`${backendUrl}/api/patients/${patientId}/predictions`).catch(err => { console.error('예측 데이터 오류:', err); return null; }),
+                    fetch(`${backendUrl}/api/patients/${patientId}/alerts?active_only=true`).catch(err => { console.error('알림 데이터 오류:', err); return null; }),
+                    fetch(`${backendUrl}/api/patients/${patientId}/glucose`).catch(err => { console.error('혈당 데이터 오류:', err); return null; }),
+                    fetch(`${backendUrl}/api/patients/${patientId}/states`).catch(err => { console.error('상태 데이터 오류:', err); return null; })
+                ]);
 
-                 // 각 응답 처리
-                 if (patientRes.ok) patientData = await patientRes.json();
-                 if (predictionRes.ok) predictionData = await predictionRes.json();
-                 if (alertRes.ok) alertData = await alertRes.json();
-                 if (glucoseRes.ok) glucoseData = await glucoseRes.json();
+                if (patientRes && patientRes.ok) patientData = await patientRes.json();
+                if (predictionRes && predictionRes.ok) predictionData = await predictionRes.json();
+                if (alertRes && alertRes.ok) alertData = await alertRes.json();
+                if (glucoseRes && glucoseRes.ok) glucoseData = await glucoseRes.json();
+                if (stateRes && stateRes.ok) stateData = await stateRes.json();
 
-                // UI 업데이트
-                 if (patientData) updatePatientInfoUI(patientData);
-                 if (predictionData) updatePredictionUI(predictionData);
-                 if (alertData) updateAlertUI(alertData.alerts);
+                if (!patientData || !glucoseData || !predictionData) {
+                    // 데이터가 없으면 SeedDemoData 호출
+                    console.log('데이터가 없어 SeedDemoData 호출 시도');
+                    const seedResponse = await fetch(`${backendUrl}/api/seed_demo_data`, { method: 'POST' });
+                    if (seedResponse.ok) {
+                        console.log('SeedDemoData 성공, 데이터 다시 로드');
+                        await fetchData(hours); // 다시 로드
+                        return;
+                    } else {
+                        throw new Error('SeedDemoData 호출 실패');
+                    }
+                }
 
-                 // 홈 화면 최근 로그 업데이트 (최근 3시간 데이터 사용)
-                 if (glucoseData) updateRecentLogsUI(glucoseData.readings);
-                 // 차트 업데이트 (선택된 시간 범위 데이터 사용)
-                 if (glucoseData) updateChart(glucoseData.readings, hours);
-
+                if (patientData) updatePatientInfoUI(patientData);
+                if (predictionData) updatePredictionUI(predictionData.predictions);
+                if (alertData) updateAlertUI(alertData.alerts);
+                if (glucoseData) updateRecentLogsUI(glucoseData.readings);
+                if (glucoseData) updateChart(glucoseData.readings, hours);
+                if (stateData) updateStateLogsUI(stateData.states);
 
             } catch (error) {
                 console.error('데이터 로딩 오류:', error);
-                alert('데이터를 불러오는 중 오류가 발생했습니다.');
-                // 오류 시 UI 처리 (예: '데이터 로드 실패' 메시지 표시)
+                alert('데이터를 불러오는 중 오류가 발생했습니다. 관리자에게 문의하세요.');
                 currentGlucoseValueEl.innerText = '오류';
                 predictionValue30El.innerText = '오류';
                 predictionValue60El.innerText = '오류';
-                 recentLogsContainerEl.innerHTML = '<div class="log-item text-center text-danger p-3">데이터 로드 실패</div>';
-                 if (glucoseChartInstance) glucoseChartInstance.destroy();
-
+                recentLogsContainerEl.innerHTML = '<div class="log-item text-center text-danger p-3">데이터 로드 실패</div>';
+                stateLogsContainerEl.innerHTML = '<div class="log-item text-center text-danger p-3">상태 데이터 로드 실패</div>';
+                if (glucoseChartInstance) {
+                    glucoseChartInstance.destroy();
+                    glucoseChartInstance = null;
+                }
             } finally {
                 hideLoading();
             }
         }
 
         async function fetchAllLogs(dateStr) {
-             showLoading('전체 기록 로딩 중...');
-             try {
-                 // TODO: 백엔드 API에 날짜 필터링 기능 추가 필요
-                 // 임시로 최근 7일치 데이터를 가져오는 것으로 가정
-                const response = await fetch(`${backendUrl}/api/patients/${patientId}/glucose?hours=${24 * 7}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    // 클라이언트 측에서 날짜 필터링 (백엔드 필터링이 더 효율적)
-                    const filteredReadings = data.readings.filter(r => r.timestamp.startsWith(dateStr));
-                    updateAllLogsUI(filteredReadings);
-                } else {
-                     throw new Error('Failed to load logs');
-                }
-             } catch (error) {
-                console.error("전체 기록 로딩 오류:", error);
-                allLogsContainerEl.innerHTML = '<div class="log-item text-center text-danger p-3">기록 로드 실패</div>';
-             } finally {
-                hideLoading();
-             }
+    showLoading('전체 기록 로딩 중...');
+    try {
+        const response = await fetch(`${backendUrl}/api/patients/${patientId}/glucose`);
+        if (response.ok) {
+            const data = await response.json();
+            const readings = Array.isArray(data.readings) ? data.readings : [];
+            console.log(readings);
+            const filteredReadings = readings.filter(r => r.timestamp?.startsWith(dateStr));
+            updateAllLogsUI(filteredReadings);
+        } else {
+            throw new Error('Failed to load logs');
         }
+    } catch (error) {
+        console.error("전체 기록 로딩 오류:", error);
+        allLogsContainerEl.innerHTML = '<div class="log-item text-center text-danger p-3">기록 로드 실패</div>';
+    } finally {
+        hideLoading();
+    }
+}
 
+        async function submitState() {
+            const state = document.getElementById('stateInput').value;
+            const meal = parseInt(document.getElementById('mealInput').value);
+            if (!state || isNaN(meal)) {
+                alert('상태와 식사량을 입력하세요.');
+                return;
+            }
+
+            showLoading('상태 입력 중...');
+            try {
+                const response = await fetch(`${backendUrl}/api/patients/${patientId}/states`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ state, meal })
+                });
+                if (response.ok) {
+                    document.getElementById('stateInput').value = '';
+                    document.getElementById('mealInput').value = '';
+                    fetchData(currentChartHours);
+                } else {
+                    const errorResult = await response.json();
+                    alert(`상태 입력 실패: ${errorResult.error}`);
+                }
+            } catch (error) {
+                console.error('상태 입력 오류:', error);
+                alert('상태 입력 중 오류 발생');
+            } finally {
+                hideLoading();
+            }
+        }
 
         // --- 이벤트 리스너 ---
         document.getElementById('emergencyBtn').addEventListener('click', async () => {
@@ -887,7 +977,6 @@
 
                 if (response.ok) {
                     alert(`긴급 연결 요청 성공! 의사가 곧 연결할 것입니다. 참여 URL(참고용): ${result.joinUrl || result.id}`);
-                    // 실제 앱에서는 Webex SDK를 사용하거나 joinUrl을 통해 미팅 참여 유도
                 } else {
                     alert(`긴급 연결 실패: ${result.error || '알 수 없는 오류'}`);
                 }
@@ -898,94 +987,72 @@
             }
         });
 
-        // 하단 네비게이션 탭 전환
         bottomNavLinks.forEach(link => {
             link.addEventListener('click', (event) => {
                 event.preventDefault();
                 const targetId = link.getAttribute('data-target');
 
-                if (!targetId) return; // data-target 속성 없는 경우 (설정 등) 무시
+                if (!targetId) return;
 
-                // 모든 컨텐츠 숨기기
                 homeContent.style.display = 'none';
                 chartContent.style.display = 'none';
                 logContent.style.display = 'none';
 
-                // 타겟 컨텐츠 보이기
                 const targetElement = document.getElementById(targetId);
                 if (targetElement) {
                     targetElement.style.display = 'block';
                 }
 
-                // 모든 링크 active 클래스 제거
                 bottomNavLinks.forEach(l => l.classList.remove('active'));
-                // 클릭된 링크에 active 클래스 추가
                 link.classList.add('active');
 
-                 // 로그 화면 로드 시 오늘 날짜 로그 자동 로드
-                 if (targetId === 'logContent') {
-                     const today = new Date().toISOString().split('T')[0];
-                     logDateFilterEl.value = today; // 오늘 날짜로 설정
-                     fetchAllLogs(today);
-                 }
-                 // 차트 화면 로드 시 현재 설정된 시간으로 데이터 다시 로드 (필요시)
-                 else if (targetId === 'chartContent') {
-                     fetchData(currentChartHours);
-                 }
-                 // 홈 화면 로드 시 데이터 다시 로드 (필요시)
-                 else if (targetId === 'homeContent') {
-                    fetchData(3); // 홈은 기본 3시간 기준 재로드
-                 }
+                if (targetId === 'logContent') {
+                    const today = new Date().toISOString().split('T')[0];
+                    logDateFilterEl.value = today;
+                    fetchAllLogs(today);
+                } else if (targetId === 'chartContent') {
+                    fetchData(currentChartHours);
+                } else if (targetId === 'homeContent') {
+                    fetchData(3);
+                }
             });
         });
 
-        // 차트 시간 범위 선택 버튼
         timeSelectorBtns.forEach(btn => {
-             btn.addEventListener('click', () => {
-                 timeSelectorBtns.forEach(b => b.classList.remove('active'));
-                 btn.classList.add('active');
-                 currentChartHours = parseInt(btn.getAttribute('data-hours'));
-                 fetchData(currentChartHours); // 선택된 시간으로 데이터 다시 로드
+            btn.addEventListener('click', () => {
+                timeSelectorBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentChartHours = parseInt(btn.getAttribute('data-hours'));
+                fetchData(currentChartHours);
             });
         });
 
-         // 전체 로그 날짜 필터 변경
-         logDateFilterEl.addEventListener('change', (event) => {
-             fetchAllLogs(event.target.value);
-         });
+        logDateFilterEl.addEventListener('change', (event) => {
+            fetchAllLogs(event.target.value);
+        });
 
-        // 상세 예측 보기 버튼 (차트 탭으로 이동)
         document.getElementById('viewPredictionBtn').addEventListener('click', () => {
-            // 차트 탭 링크 찾아서 클릭 이벤트 발생시키기
-             document.querySelector('.nav-link[data-target="chartContent"]').click();
+            document.querySelector('.nav-link[data-target="chartContent"]').click();
         });
 
-        // 최근 기록 모두 보기 버튼 (로그 탭으로 이동)
-         document.getElementById('viewAllLogsBtn').addEventListener('click', () => {
-             document.querySelector('.nav-link[data-target="logContent"]').click();
-         });
+        document.getElementById('viewAllLogsBtn').addEventListener('click', () => {
+            document.querySelector('.nav-link[data-target="logContent"]').click();
+        });
 
-
-        // --- 초기 데이터 로드 ---
         document.addEventListener('DOMContentLoaded', () => {
-             fetchData(currentChartHours); // 페이지 로드 시 3시간 데이터 로드
-             // 30초마다 데이터 자동 갱신
-             setInterval(() => {
-                  // 현재 활성화된 탭에 따라 적절한 시간 범위로 fetchData 호출
-                  const activeLink = document.querySelector('.bottom-nav .nav-link.active');
-                  const activeTarget = activeLink ? activeLink.getAttribute('data-target') : 'homeContent';
-                  let hoursToFetch = 3; // 기본 홈
-                  if (activeTarget === 'chartContent') {
-                       hoursToFetch = currentChartHours;
-                  } else if (activeTarget === 'logContent') {
-                       // 로그 탭은 자동 갱신 안 함 (날짜 필터 기준)
-                       return;
-                  }
-                  fetchData(hoursToFetch);
-             }, 30000); // 30초
+            fetchData(currentChartHours);
+            setInterval(() => {
+                const activeLink = document.querySelector('.bottom-nav .nav-link.active');
+                const activeTarget = activeLink ? activeLink.getAttribute('data-target') : 'homeContent';
+                let hoursToFetch = 3;
+                if (activeTarget === 'chartContent') {
+                    hoursToFetch = currentChartHours;
+                } else if (activeTarget === 'logContent') {
+                    return;
+                }
+                fetchData(hoursToFetch);
+            }, 30000);
         });
-
     </script>
-
 </body>
 </html>
