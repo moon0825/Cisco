@@ -106,7 +106,7 @@ def initialize_demo_data():
         "doctor_id": "doctor1",
         "insulin_regimen": "Multiple daily injections",
         "target_glucose_range": {"min": 70, "max": 180},
-        "email": os.environ.get("TEST_PATIENT_EMAIL", "patient1_test@example.com") # 테스트용 이메일 (환경 변수 우선)
+        "email": os.environ.get("TEST_PATIENT_EMAIL", "muns0825@gmail.com") # 테스트용 이메일 (환경 변수 우선)
     }
 
     # 샘플 의사 데이터
@@ -116,7 +116,7 @@ def initialize_demo_data():
         "specialty": "내분비내과",
         "hospital": "서울대학교병원",
         "patients": ["patient1"],
-        "email": os.environ.get("TEST_DOCTOR_EMAIL", "doctor1_test@example.com") # 테스트용 이메일 (환경 변수 우선)
+        "email": os.environ.get("TEST_DOCTOR_EMAIL", "mnmn0825@naver.com") # 테스트용 이메일 (환경 변수 우선)
     }
 
     # 샘플 혈당 데이터 생성 (최근 24시간)
