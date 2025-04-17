@@ -1,536 +1,542 @@
-<div class="sidebar">
-    <a href="#" class="sidebar-link active" id="dashboardLink" data-target="dashboardContent">
-        <i class="bi bi-speedometer2"></i> <span>대시보드</span>
-    </a>
-    <a href="#" class="sidebar-link" id="patientsLink" data-target="patientListContent">
-        <i class="bi bi-people"></i> <span>환자 관리</span>
-    </a>
-    <a href="#" class="sidebar-link" id="alertsLink" data-target="alertCenterContent">
-        <i class="bi bi-exclamation-triangle"></i> <span>알림 센터</span>
-    </a>
-    <a href="#" class="sidebar-link" id="sessionsLink" data-target="sessionContent">
-        <i class="bi bi-camera-video"></i> <span>원격 진료</span>
-    </a>
-    <a href="#" class="sidebar-link" id="settingsLink" data-target="settingsContent">
-        <i class="bi bi-gear"></i> <span>설정</span>
-    </a>
-</div>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pGluc-Webex 의료진 대시보드</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #0052cc; --secondary-color: #00a0d1;
+            --danger-color: #e94f37; --warning-color: #f7a800;
+            --success-color: #36b37e; --bg-light: #f5f7fa;
+            --text-dark: #253858; --text-light: #6b778c;
+        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-light); color: var(--text-dark); min-height: 100vh; padding-top: 56px; /* Navbar 높이만큼 패딩 추가 */ }
+        .navbar { background-color: white; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+        .navbar-brand { font-weight: 700; color: var(--primary-color); }
+        .webex-logo { height: 24px; margin-right: 8px; vertical-align: middle; }
 
-<div class="main-content">
-    <div id="dashboardContent">
-        <div class="row" id="dashboardPatientListSummary">
-            <p class="text-center text-muted">환자 정보 로딩 중...</p>
-        </div>
-        <div class="card mt-4">
-            <div class="card-header">최근 알림</div>
-            <div class="card-body p-0" id="dashboardAlertsSummary">
-                <div class="notification-item text-center text-muted p-3">알림 로딩 중...</div>
-            </div>
-        </div>
+        .sidebar { position: fixed; top: 56px; /* Navbar 높이 고려 */ left: 0; width: 250px; height: calc(100vh - 56px); background-color: white; box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05); padding-top: 20px; /* 위쪽 패딩 추가 */ overflow-y: auto; z-index: 1000; }
+        .sidebar-link { display: flex; align-items: center; padding: 12px 20px; color: var(--text-dark); text-decoration: none; transition: all 0.2s; border-left: 4px solid transparent; /* Active 상태 위한 공간 확보 */ }
+        .sidebar-link:hover { background-color: var(--bg-light); color: var(--primary-color); }
+        .sidebar-link.active { background-color: #e8f0fe; color: var(--primary-color); border-left-color: var(--primary-color); font-weight: 500; }
+        .sidebar-link i { margin-right: 10px; font-size: 1.2rem; width: 20px; /* 아이콘 너비 고정 */ text-align: center; }
+
+        .main-content { margin-left: 250px; padding: 30px; /* 패딩 조정 */ }
+
+        .card { border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); margin-bottom: 20px; border: none; }
+        .card-header { background-color: white; border-bottom: 1px solid rgba(0, 0, 0, 0.05); font-weight: 600; padding: 15px 20px; }
+
+        /* ... (Alert, Button, Patient Card 등 나머지 스타일은 이전과 동일하게 유지) ... */
+        .alert-card { border-left: 4px solid var(--danger-color); background-color: #fff8f8; }
+        .alert-warning { border-left: 4px solid var(--warning-color); background-color: #fffbf0; }
+        .alert-high { border-left: 4px solid #cc0000; background-color: #fff5f5; }
+        .alert-title { font-weight: 600; color: var(--danger-color); }
+        .alert-warning .alert-title { color: var(--warning-color); }
+        .alert-high .alert-title { color: #cc0000; }
+        .patient-card { cursor: pointer; transition: all 0.2s; }
+        .patient-card:hover { transform: translateY(-3px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1); }
+        .patient-status { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .status-normal { background-color: var(--success-color); }
+        .status-warning { background-color: var(--warning-color); }
+        .status-danger { background-color: var(--danger-color); }
+        .glucose-value { font-size: 1.8rem; font-weight: 700; color: var(--primary-color); }
+        .glucose-unit { font-size: 0.9rem; color: var(--text-light); }
+        .glucose-trend { font-size: 1rem; margin-left: 5px; }
+        .trend-up { color: var(--danger-color); } .trend-down { color: var(--warning-color); } .trend-stable { color: var(--success-color); }
+        .chart-container { height: 300px; margin: 20px 0; }
+        .time-selector { display: flex; justify-content: space-between; margin-bottom: 15px; }
+        .time-btn { flex: 1; text-align: center; padding: 8px; background-color: white; border: 1px solid #e0e0e0; color: var(--text-light); font-weight: 500; cursor: pointer; transition: background-color 0.2s, color 0.2s; }
+        .time-btn:first-child { border-radius: 50px 0 0 50px; } .time-btn:last-child { border-radius: 0 50px 50px 0; }
+        .time-btn.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .notification-item { padding: 10px 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+        .notification-item:hover { background-color: var(--bg-light); }
+        .notification-unread { background-color: #f0f7ff; border-left: 3px solid var(--primary-color); }
+        .loading-container { /* 이전과 동일 */ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
+        .loading-container.active { display: flex; }
+        .spinner-border { width: 3rem; height: 3rem; color: var(--primary-color); }
+        .loading-text { margin-top: 20px; font-weight: 600; color: var(--primary-color); }
+
+        /* 반응형: 작은 화면에서 사이드바 축소 */
+        @media (max-width: 768px) { /* 중단점 조정 가능 */
+            .sidebar { width: 70px; padding-top: 20px; }
+            .sidebar-link span { display: none; }
+            .sidebar-link i { margin-right: 0; font-size: 1.6rem; }
+            .sidebar-link { justify-content: center; padding: 15px 0; }
+            .main-content { margin-left: 70px; padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-container" id="loadingOverlay">
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+        <div class="loading-text" id="loadingText">로딩 중...</div>
     </div>
 
-    <div id="patientListContent" style="display: none;">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h4>환자 관리</h4>
-            <div class="patient-search">
-                <i class="bi bi-search"></i>
-                <input type="text" class="form-control" placeholder="환자 이름 검색">
-            </div>
+    <nav class="navbar navbar-light fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <img src="/static/webex_logo.png" alt="Webex Logo" class="webex-logo"> pGluc-Webex 의료진 대시보드
+            </a>
+            <div class="d-flex">
+                </div>
         </div>
-        <div class="row" id="patientListContainer">
-            <p class="text-center text-muted">환자 목록 로딩 중...</p>
-        </div>
+    </nav>
+
+    <div class="sidebar">
+        <a href="#" class="sidebar-link active" id="dashboardLink" data-target="dashboardContent"> <i class="bi bi-speedometer2"></i> <span>대시보드</span> </a>
+        <a href="#" class="sidebar-link" id="patientsLink" data-target="patientListContent"> <i class="bi bi-people"></i> <span>환자 관리</span> </a>
+        <a href="#" class="sidebar-link" id="alertsLink" data-target="alertCenterContent"> <i class="bi bi-exclamation-triangle"></i> <span>알림 센터</span> </a>
+        <a href="#" class="sidebar-link" id="sessionsLink" data-target="sessionContent"> <i class="bi bi-camera-video"></i> <span>원격 진료</span> </a>
+        <a href="#" class="sidebar-link" id="settingsLink" data-target="settingsContent"> <i class="bi bi-gear"></i> <span>설정</span> </a>
     </div>
 
-    <div id="alertCenterContent" style="display: none;">
-        <h4>알림 센터</h4>
-        <div class="card">
-             <div class="card-body p-0" id="alertListContainer">
-                <div class="notification-item text-center text-muted p-3">전체 알림 로딩 중...</div>
+    <div class="main-content">
+        <div id="dashboardContent">
+             <h4>대시보드</h4>
+             <div class="row mb-4">
+                <div class="col-md-4"> <div class="card"><div class="card-body"><h6 class="text-muted">총 환자 수</h6><h4 id="patientCount">...</h4></div></div> </div>
+                <div class="col-md-4"> <div class="card"><div class="card-body"><h6 class="text-muted">활성 알림</h6><h4 id="activeAlertsCount">...</h4></div></div> </div>
+                <div class="col-md-4"> <div class="card"><div class="card-body"><h6 class="text-muted">예정된 세션</h6><h4 id="scheduledSessionsCount">...</h4></div></div> </div>
              </div>
+             <h6>환자 목록 요약</h6>
+             <div class="row" id="dashboardPatientListSummary"><p class="text-muted">로딩 중...</p></div>
+             <div class="card mt-4"><div class="card-header">최근 알림</div><div class="card-body p-0" id="dashboardAlertsSummary"><p class="text-muted p-3">로딩 중...</p></div></div>
         </div>
+        <div id="patientListContent" style="display: none;"><h4>환자 관리</h4><div class="mb-3 patient-search"><i class="bi bi-search"></i><input type="text" class="form-control" placeholder="환자 검색"></div><div class="row" id="patientListContainer"><p class="text-muted">로딩 중...</p></div></div>
+        <div id="alertCenterContent" style="display: none;"><h4>알림 센터</h4><div class="card"><div class="card-body p-0" id="alertListContainer"><p class="text-muted p-3">로딩 중...</p></div></div></div>
+        <div id="sessionContent" style="display: none;"><h4>원격 진료 세션</h4><div class="card"><div class="card-header d-flex justify-content-between align-items-center"><span>세션 목록</span><button class="btn btn-sm btn-action" data-bs-toggle="modal" data-bs-target="#scheduleModal"><i class="bi bi-calendar-plus"></i> 새 예약</button></div><div class="card-body" id="sessionListContainer"><p class="text-muted">로딩 중...</p></div></div></div>
+        <div id="settingsContent" style="display: none;"><h4>설정</h4><div class="card"><div class="card-header">Webex 계정 연동</div><div class="card-body"><p id="webexStatusText">확인 중...</p><button class="btn btn-primary" id="connectWebexBtn" style="display: none;"><i class="bi bi-box-arrow-up-right"></i> Webex 계정 연결</button></div></div></div>
     </div>
 
-    <div id="sessionContent" style="display: none;">
-        <h4>원격 진료 세션</h4>
-         <div class="card">
-             <div class="card-header d-flex justify-content-between align-items-center">
-                 <span>예약된/진행중 세션</span>
-                 <button class="btn btn-sm btn-action" data-bs-toggle="modal" data-bs-target="#scheduleModal">
-                     <i class="bi bi-calendar-plus"></i> 새 예약
-                 </button>
-             </div>
-             <div class="card-body" id="sessionListContainer">
-                 <p class="text-center text-muted">세션 정보 로딩 중...</p>
-             </div>
-         </div>
-    </div>
+    <div class="modal fade" id="scheduleModal" ...> ... </div>
 
-    <div id="settingsContent" style="display: none;">
-        <h4>설정</h4>
-        <div class="card">
-            <div class="card-header">Webex 계정 연동</div>
-            <div class="card-body">
-                <p id="webexStatusText">Webex 연동 상태 확인 중...</p>
-                <button class="btn btn-primary" id="connectWebexBtn" style="display: none;">
-                    <i class="bi bi-box-arrow-up-right"></i> Webex 계정 연결
-                </button>
-            </div>
-        </div>
-        </div>
-</div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-labelledby="scheduleModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="scheduleModalLabel">새 원격 진료 예약</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <label for="schedulePatientSelect" class="form-label">환자 선택</label>
-          <select class="form-select" id="schedulePatientSelect">
-            <option selected disabled>환자를 선택하세요</option>
-          </select>
-        </div>
-        <div class="mb-3">
-          <label for="scheduleDateTime" class="form-label">예약 시간</label>
-          <input type="datetime-local" class="form-control" id="scheduleDateTime">
-        </div>
-         <div class="mb-3">
-            <label for="scheduleDuration" class="form-label">진료 시간 (분)</label>
-            <input type="number" class="form-control" id="scheduleDuration" value="30">
-         </div>
-         <div class="mb-3">
-             <label for="scheduleNotes" class="form-label">메모</label>
-             <textarea class="form-control" id="scheduleNotes" rows="3"></textarea>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
-        <button type="button" class="btn btn-primary" id="submitScheduleBtn">예약 생성</button>
-      </div>
-    </div>
-  </div>
-</div>
+    <script>
+        const backendUrl = 'https://cisco-ejsn.vercel.app'; // 백엔드 API 주소
+        const PATIENT_FRONTEND_URL = 'https://cisco-tawny.vercel.app'; // 환자용 프론트엔드 주소 (필요시 수정)
+        // TODO: 실제 로그인 구현 후 동적으로 의사 ID 설정 필요
+        const doctorId = 'doctor1'; // 임시 의사 ID
 
-<script>
-    const backendUrl = 'https://cisco-ejsn.vercel.app'; // 백엔드 API 주소
-    const PATIENT_FRONTEND_URL = 'https://cisco-tawny.vercel.app'; // 환자용 프론트엔드 주소 (필요시 수정)
-    // TODO: 실제 로그인 구현 후 동적으로 의사 ID 설정 필요
-    const doctorId = 'doctor1'; // 임시 의사 ID
+        // --- DOM 요소 ---
+        const mainContentArea = document.querySelector('.main-content');
+        const sidebarLinks = document.querySelectorAll('.sidebar-link');
+        const dashboardContent = document.getElementById('dashboardContent');
+        const patientListContent = document.getElementById('patientListContent'); // 환자 관리 컨텐츠
+        const alertCenterContent = document.getElementById('alertCenterContent'); // 알림 센터 컨텐츠
+        const sessionContent = document.getElementById('sessionContent');       // 원격 진료 컨텐츠
+        const settingsContent = document.getElementById('settingsContent');    // 설정 컨텐츠
 
-    // --- DOM 요소 ---
-    const mainContentArea = document.querySelector('.main-content');
-    const sidebarLinks = document.querySelectorAll('.sidebar-link');
-    const dashboardContent = document.getElementById('dashboardContent');
-    const patientListContent = document.getElementById('patientListContent'); // 환자 관리 컨텐츠
-    const alertCenterContent = document.getElementById('alertCenterContent'); // 알림 센터 컨텐츠
-    const sessionContent = document.getElementById('sessionContent');       // 원격 진료 컨텐츠
-    const settingsContent = document.getElementById('settingsContent');    // 설정 컨텐츠
+        const dashboardPatientListSummaryEl = document.getElementById('dashboardPatientListSummary');
+        const dashboardAlertsSummaryEl = document.getElementById('dashboardAlertsSummary');
+        const patientListContainerEl = document.getElementById('patientListContainer');
+        const alertListContainerEl = document.getElementById('alertListContainer');
+        const sessionListContainerEl = document.getElementById('sessionListContainer');
+        const webexStatusTextEl = document.getElementById('webexStatusText');
+        const connectWebexBtnEl = document.getElementById('connectWebexBtn');
+        const schedulePatientSelectEl = document.getElementById('schedulePatientSelect');
+        const submitScheduleBtnEl = document.getElementById('submitScheduleBtn');
 
-    const dashboardPatientListSummaryEl = document.getElementById('dashboardPatientListSummary');
-    const dashboardAlertsSummaryEl = document.getElementById('dashboardAlertsSummary');
-    const patientListContainerEl = document.getElementById('patientListContainer');
-    const alertListContainerEl = document.getElementById('alertListContainer');
-    const sessionListContainerEl = document.getElementById('sessionListContainer');
-    const webexStatusTextEl = document.getElementById('webexStatusText');
-    const connectWebexBtnEl = document.getElementById('connectWebexBtn');
-    const schedulePatientSelectEl = document.getElementById('schedulePatientSelect');
-    const submitScheduleBtnEl = document.getElementById('submitScheduleBtn');
+        // --- 유틸리티 함수 ---
+        function showLoading(message = '로딩 중...') { /* 이전과 동일 */ }
+        function hideLoading() { /* 이전과 동일 */ }
+        function getTrendInfo(currentValue, previousValue) { /* 이전과 동일 */ return { icon: 'bi-dash', class: 'trend-stable', change: 0 };}
+        function formatTimestamp(isoString) {
+            return isoString ? moment(isoString).format('YYYY-MM-DD HH:mm') : '-';
+        }
+        function formatTimeAgo(isoString) {
+            return isoString ? moment(isoString).fromNow() : '-';
+        }
 
-    // --- 유틸리티 함수 ---
-    function showLoading(message = '로딩 중...') { /* 이전과 동일 */ }
-    function hideLoading() { /* 이전과 동일 */ }
-    function getTrendInfo(currentValue, previousValue) { /* 이전과 동일 */ return { icon: 'bi-dash', class: 'trend-stable', change: 0 };}
-    function formatTimestamp(isoString) {
-        return isoString ? moment(isoString).format('YYYY-MM-DD HH:mm') : '-';
-    }
-    function formatTimeAgo(isoString) {
-         return isoString ? moment(isoString).fromNow() : '-';
-    }
-
-    // --- 데이터 로딩 함수 ---
-    async function fetchApi(endpoint, options = {}) {
-        // 공통 fetch 로직 (오류 처리 포함)
-        try {
-            const response = await fetch(`${backendUrl}${endpoint}`, options);
-            if (!response.ok) {
-                let errorMsg = `API 오류 (${response.status})`;
-                try {
-                    const errData = await response.json();
-                    errorMsg = errData.error || errData.message || errorMsg;
-                } catch (e) { /* JSON 파싱 실패 무시 */ }
-                console.error(`API ${endpoint} 호출 실패:`, errorMsg);
-                throw new Error(errorMsg);
+        // --- 데이터 로딩 함수 ---
+        async function fetchApi(endpoint, options = {}) {
+            // 공통 fetch 로직 (오류 처리 포함)
+            try {
+                const response = await fetch(`${backendUrl}${endpoint}`, options);
+                if (!response.ok) {
+                    let errorMsg = `API 오류 (${response.status})`;
+                    try {
+                        const errData = await response.json();
+                        errorMsg = errData.error || errData.message || errorMsg;
+                    } catch (e) { /* JSON 파싱 실패 무시 */ }
+                    console.error(`API ${endpoint} 호출 실패:`, errorMsg);
+                    throw new Error(errorMsg);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error(`API ${endpoint} 네트워크 오류:`, error);
+                throw error; // 오류 다시 던지기
             }
-            return await response.json();
-        } catch (error) {
-            console.error(`API ${endpoint} 네트워크 오류:`, error);
-            throw error; // 오류 다시 던지기
         }
-    }
 
-    async function loadDashboardData() {
-        console.log('대시보드 데이터 로딩...');
-        showLoading('대시보드 로딩 중...');
-        try {
-            // TODO: 백엔드에 /api/doctors/{doctorId}/summary API 구현 필요
-            // const summary = await fetchApi(`/api/doctors/${doctorId}/summary`);
-            // 임시 데이터
-             const summary = { totalPatients: 0, activeAlerts: 0, upcomingSessions: 0 };
-             const patientsData = await fetchApi(`/api/doctors/${doctorId}/patients`); // 환자 목록 API 필요
-             const alertsData = await fetchApi(`/api/alerts?doctor_id=${doctorId}&limit=5`); // 알림 API 필요
+        async function loadDashboardData() {
+            console.log('대시보드 데이터 로딩...');
+            showLoading('대시보드 로딩 중...');
+            try {
+                // TODO: 백엔드에 /api/doctors/{doctorId}/summary API 구현 필요
+                // const summary = await fetchApi(`/api/doctors/${doctorId}/summary`);
+                // 임시 데이터
+                const summary = { totalPatients: 0, activeAlerts: 0, upcomingSessions: 0 };
+                const patientsData = await fetchApi(`/api/doctors/${doctorId}/patients`); // 환자 목록 API 필요
+                const alertsData = await fetchApi(`/api/alerts?doctor_id=${doctorId}&limit=5`); // 알림 API 필요
 
-             // 요약 카드 업데이트
-             document.getElementById('patientCount').innerText = patientsData?.patients?.length ?? summary.totalPatients;
-             document.getElementById('activeAlertsCount').innerText = alertsData?.alerts?.filter(a => a.status === 'active').length ?? summary.activeAlerts;
-             // TODO: 예정된 세션 수 업데이트 (세션 API 필요)
-             document.getElementById('scheduledSessionsCount').innerText = summary.upcomingSessions;
+                // 요약 카드 업데이트
+                document.getElementById('patientCount').innerText = patientsData?.patients?.length ?? summary.totalPatients;
+                document.getElementById('activeAlertsCount').innerText = alertsData?.alerts?.filter(a => a.status === 'active').length ?? summary.activeAlerts;
+                // TODO: 예정된 세션 수 업데이트 (세션 API 필요)
+                document.getElementById('scheduledSessionsCount').innerText = summary.upcomingSessions;
 
-             // 대시보드 내 환자 목록 요약 업데이트
-             renderPatientList(patientsData?.patients ?? [], dashboardPatientListSummaryEl, true); // true: 요약 모드
-             // 대시보드 내 최근 알림 요약 업데이트
-             renderAlertList(alertsData?.alerts ?? [], dashboardAlertsSummaryEl, true); // true: 요약 모드
+                // 대시보드 내 환자 목록 요약 업데이트
+                renderPatientList(patientsData?.patients ?? [], dashboardPatientListSummaryEl, true); // true: 요약 모드
+                // 대시보드 내 최근 알림 요약 업데이트
+                renderAlertList(alertsData?.alerts ?? [], dashboardAlertsSummaryEl, true); // true: 요약 모드
 
-        } catch (error) {
-            alert(`대시보드 로딩 실패: ${error.message}`);
-            // 오류 시 UI 처리
-            dashboardPatientListSummaryEl.innerHTML = '<p class="text-danger">환자 정보 로딩 실패</p>';
-            dashboardAlertsSummaryEl.innerHTML = '<div class="notification-item text-danger p-3">알림 로딩 실패</div>';
-        } finally {
-            hideLoading();
+            } catch (error) {
+                alert(`대시보드 로딩 실패: ${error.message}`);
+                // 오류 시 UI 처리
+                dashboardPatientListSummaryEl.innerHTML = '<p class="text-danger">환자 정보 로딩 실패</p>';
+                dashboardAlertsSummaryEl.innerHTML = '<div class="notification-item text-danger p-3">알림 로딩 실패</div>';
+            } finally {
+                hideLoading();
+            }
         }
-    }
 
-    async function loadPatientListData() {
-        console.log('환자 목록 데이터 로딩...');
-        showLoading('환자 목록 로딩 중...');
-        try {
-            // TODO: 백엔드에 /api/doctors/{doctorId}/patients API 구현 필요
-            const data = await fetchApi(`/api/doctors/${doctorId}/patients`);
-            renderPatientList(data?.patients ?? [], patientListContainerEl); // 전체 목록 렌더링
-        } catch (error) {
-            alert(`환자 목록 로딩 실패: ${error.message}`);
-            patientListContainerEl.innerHTML = '<p class="text-danger text-center">환자 목록 로딩 실패</p>';
-        } finally {
-            hideLoading();
+        async function loadPatientListData() {
+            console.log('환자 목록 데이터 로딩...');
+            showLoading('환자 목록 로딩 중...');
+            try {
+                // TODO: 백엔드에 /api/doctors/{doctorId}/patients API 구현 필요
+                const data = await fetchApi(`/api/doctors/${doctorId}/patients`);
+                renderPatientList(data?.patients ?? [], patientListContainerEl); // 전체 목록 렌더링
+            } catch (error) {
+                alert(`환자 목록 로딩 실패: ${error.message}`);
+                patientListContainerEl.innerHTML = '<p class="text-danger text-center">환자 목록 로딩 실패</p>';
+            } finally {
+                hideLoading();
+            }
         }
-    }
 
-    async function loadAlertsData() {
-        console.log('알림 센터 데이터 로딩...');
-         showLoading('알림 로딩 중...');
-        try {
-             // TODO: 백엔드에 /api/alerts?doctor_id={doctorId} API 구현 필요
-             const data = await fetchApi(`/api/alerts?doctor_id=${doctorId}`); // limit 없이 전체 로드
-             renderAlertList(data?.alerts ?? [], alertListContainerEl); // 전체 목록 렌더링
-         } catch (error) {
-             alert(`알림 로딩 실패: ${error.message}`);
-             alertListContainerEl.innerHTML = '<div class="notification-item text-danger p-3 text-center">알림 로딩 실패</div>';
-         } finally {
-             hideLoading();
-         }
-    }
-
-     async function loadSessionsData() {
-         console.log('원격 진료 세션 로딩...');
-         showLoading('세션 로딩 중...');
-         try {
-            // TODO: 백엔드에 Webex 세션/미팅 목록 API 구현 필요
-            // 예: /api/webex/meetings?user_id={doctorId} 또는 /api/webex/sessions?user_id={doctorId}
-            // const data = await fetchApi(`/api/webex/sessions?user_id=${doctorId}`);
-            // 임시 데이터
-             const data = { sessions: [
-                 { id: 'sched1', title: '김재홍 정기 검진', status: 'scheduled', startTime: moment().add(1, 'day').toISOString(), patientName: '김재홍' },
-                 { id: 'emerg1', title: '박지영 긴급 상담', status: 'active', startTime: moment().subtract(10, 'minutes').toISOString(), patientName: '박지영', joinUrl: 'https://webex.example/sim' },
-                 { id: 'past1', title: '이승우 상담', status: 'ended', startTime: moment().subtract(2, 'days').toISOString(), patientName: '이승우' }
-             ]};
-             renderSessionList(data?.sessions ?? [], sessionListContainerEl);
-             populatePatientSelect(await getAllPatients()); // 예약 모달용 환자 목록 채우기
-
-         } catch (error) {
-            alert(`세션 로딩 실패: ${error.message}`);
-            sessionListContainerEl.innerHTML = '<p class="text-danger text-center">세션 정보 로딩 실패</p>';
-         } finally {
-             hideLoading();
-         }
-     }
-
-     async function loadSettingsData() {
-         console.log('설정 데이터 로딩...');
-         showLoading('설정 로딩 중...');
-         try {
-             // TODO: 백엔드에 현재 사용자의 Webex 연결 상태 확인 API 구현 필요
-             // 예: /api/users/{doctorId}/webex_status
-             // const webexStatus = await fetchApi(`/api/users/${doctorId}/webex_status`);
-             // 임시 상태
-             const webexStatus = { connected: false }; // false로 가정
-
-             if (webexStatus.connected) {
-                 webexStatusTextEl.innerText = `Webex 계정이 연결되었습니다. (${webexStatus.email ?? ''})`;
-                 connectWebexBtnEl.style.display = 'none';
-             } else {
-                 webexStatusTextEl.innerText = 'Webex 계정이 연결되지 않았습니다. 원격 진료 기능을 사용하려면 연결해주세요.';
-                 connectWebexBtnEl.style.display = 'block';
-             }
-         } catch (error) {
-             webexStatusTextEl.innerText = 'Webex 연결 상태 확인 실패.';
-             connectWebexBtnEl.style.display = 'none'; // 오류 시 버튼 숨김
-             console.error("Webex 상태 확인 오류:", error);
-         } finally {
-             hideLoading();
-         }
-     }
-
-    // --- UI 렌더링 함수 ---
-    function renderPatientList(patients, container, summaryMode = false) {
-        container.innerHTML = ''; // 기존 내용 지우기
-        if (!patients || patients.length === 0) {
-            container.innerHTML = '<p class="text-center text-muted p-3">담당 환자가 없습니다.</p>'; return;
+        async function loadAlertsData() {
+            console.log('알림 센터 데이터 로딩...');
+            showLoading('알림 로딩 중...');
+            try {
+                // TODO: 백엔드에 /api/alerts?doctor_id={doctorId} API 구현 필요
+                const data = await fetchApi(`/api/alerts?doctor_id=${doctorId}`); // limit 없이 전체 로드
+                renderAlertList(data?.alerts ?? [], alertListContainerEl); // 전체 목록 렌더링
+            } catch (error) {
+                alert(`알림 로딩 실패: ${error.message}`);
+                alertListContainerEl.innerHTML = '<div class="notification-item text-danger p-3 text-center">알림 로딩 실패</div>';
+            } finally {
+                hideLoading();
+            }
         }
-        const listToShow = summaryMode ? patients.slice(0, 3) : patients; // 요약 모드면 3명만
 
-        listToShow.forEach(patient => {
-            // TODO: 백엔드 API 응답 형식에 맞춰 필드명 조정 필요
-            const patientId = patient.id || 'unknown';
-            const name = patient.name || '이름 없음';
-            const status = patient.status || 'normal'; // 'normal', 'warning', 'danger' 가정
-            const lastGlucose = patient.lastGlucose ?? '--';
-            const trend = patient.trend || 'stable'; // 'up', 'down', 'stable' 가정
-            const lastUpdate = patient.lastUpdate || '-'; // '5분 전' 형태 가정
+        async function loadSessionsData() {
+            console.log('원격 진료 세션 로딩...');
+            showLoading('세션 로딩 중...');
+            try {
+                // TODO: 백엔드에 Webex 세션/미팅 목록 API 구현 필요
+                // 예: /api/webex/meetings?user_id={doctorId} 또는 /api/webex/sessions?user_id={doctorId}
+                // const data = await fetchApi(`/api/webex/sessions?user_id=${doctorId}`);
+                // 임시 데이터
+                const data = { sessions: [
+                    { id: 'sched1', title: '김재홍 정기 검진', status: 'scheduled', startTime: moment().add(1, 'day').toISOString(), patientName: '김재홍' },
+                    { id: 'emerg1', title: '박지영 긴급 상담', status: 'active', startTime: moment().subtract(10, 'minutes').toISOString(), patientName: '박지영', joinUrl: 'https://webex.example/sim' },
+                    { id: 'past1', title: '이승우 상담', status: 'ended', startTime: moment().subtract(2, 'days').toISOString(), patientName: '이승우' }
+                ]};
+                renderSessionList(data?.sessions ?? [], sessionListContainerEl);
+                populatePatientSelect(await getAllPatients()); // 예약 모달용 환자 목록 채우기
 
-            const trendInfo = {
-                'up': {icon: 'bi-arrow-up', class: 'trend-up'},
-                'down': {icon: 'bi-arrow-down', class: 'trend-down'},
-                'stable': {icon: 'bi-arrow-right', class: 'trend-stable'}
-            }[trend] || {icon: 'bi-dash', class: 'trend-stable'};
+            } catch (error) {
+                alert(`세션 로딩 실패: ${error.message}`);
+                sessionListContainerEl.innerHTML = '<p class="text-danger text-center">세션 정보 로딩 실패</p>';
+            } finally {
+                hideLoading();
+            }
+        }
 
-            const cardHtml = `
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="card patient-card h-100" onclick="viewPatientDetail('${patientId}')">
+        async function loadSettingsData() {
+            console.log('설정 데이터 로딩...');
+            showLoading('설정 로딩 중...');
+            try {
+                // TODO: 백엔드에 현재 사용자의 Webex 연결 상태 확인 API 구현 필요
+                // 예: /api/users/{doctorId}/webex_status
+                // const webexStatus = await fetchApi(`/api/users/${doctorId}/webex_status`);
+                // 임시 상태
+                const webexStatus = { connected: false }; // false로 가정
+
+                if (webexStatus.connected) {
+                    webexStatusTextEl.innerText = `Webex 계정이 연결되었습니다. (${webexStatus.email ?? ''})`;
+                    connectWebexBtnEl.style.display = 'none';
+                } else {
+                    webexStatusTextEl.innerText = 'Webex 계정이 연결되지 않았습니다. 원격 진료 기능을 사용하려면 연결해주세요.';
+                    connectWebexBtnEl.style.display = 'block';
+                }
+            } catch (error) {
+                webexStatusTextEl.innerText = 'Webex 연결 상태 확인 실패.';
+                connectWebexBtnEl.style.display = 'none'; // 오류 시 버튼 숨김
+                console.error("Webex 상태 확인 오류:", error);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // --- UI 렌더링 함수 ---
+        function renderPatientList(patients, container, summaryMode = false) {
+            container.innerHTML = ''; // 기존 내용 지우기
+            if (!patients || patients.length === 0) {
+                container.innerHTML = '<p class="text-center text-muted p-3">담당 환자가 없습니다.</p>'; return;
+            }
+            const listToShow = summaryMode ? patients.slice(0, 3) : patients; // 요약 모드면 3명만
+
+            listToShow.forEach(patient => {
+                // TODO: 백엔드 API 응답 형식에 맞춰 필드명 조정 필요
+                const patientId = patient.id || 'unknown';
+                const name = patient.name || '이름 없음';
+                const status = patient.status || 'normal'; // 'normal', 'warning', 'danger' 가정
+                const lastGlucose = patient.lastGlucose ?? '--';
+                const trend = patient.trend || 'stable'; // 'up', 'down', 'stable' 가정
+                const lastUpdate = patient.lastUpdate || '-'; // '5분 전' 형태 가정
+
+                const trendInfo = {
+                    'up': {icon: 'bi-arrow-up', class: 'trend-up'},
+                    'down': {icon: 'bi-arrow-down', class: 'trend-down'},
+                    'stable': {icon: 'bi-arrow-right', class: 'trend-stable'}
+                }[trend] || {icon: 'bi-dash', class: 'trend-stable'};
+
+                const cardHtml = `
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card patient-card h-100" onclick="viewPatientDetail('${patientId}')">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h5 class="card-title mb-0">${name}</h5>
+                                    <span class="patient-status status-${status}"></span>
+                                </div>
+                                <div class="d-flex align-items-center mb-1">
+                                    <div class="glucose-value">${lastGlucose}</div>
+                                    <div class="glucose-unit ms-1">mg/dL</div>
+                                    <div class="glucose-trend ${trendInfo.class}"><i class="bi ${trendInfo.icon}"></i></div>
+                                </div>
+                                <small class="text-muted">최근 업데이트: ${lastUpdate}</small>
+                            </div>
+                        </div>
+                    </div>`;
+                container.innerHTML += cardHtml;
+            });
+            if (summaryMode && patients.length > 3) {
+                container.innerHTML += `<div class="col-12 text-center mt-2"><a href="#" onclick="event.preventDefault(); document.getElementById('patientsLink').click();">전체 환자 보기</a></div>`;
+            }
+        }
+
+        function renderAlertList(alerts, container, summaryMode = false) {
+            container.innerHTML = '';
+            if (!alerts || alerts.length === 0) {
+                container.innerHTML = '<div class="notification-item text-muted text-center p-3">새 알림이 없습니다.</div>'; return;
+            }
+            const listToShow = summaryMode ? alerts.slice(0, 3) : alerts; // 요약 모드면 3개
+
+            listToShow.forEach(alert => {
+                const patientName = alert.patientName || alert.patientId || '알 수 없음'; // 환자 이름 표시
+                const alertClass = alert.status === 'active' ? 'notification-unread' : '';
+                const alertHtml = `
+                    <div class="notification-item ${alertClass}" onclick="viewPatientDetail('${alert.patientId}')">
+                        <div class="notification-time">${formatTimeAgo(alert.timestamp)}</div>
+                        <div class="notification-content">
+                            <strong>${patientName}</strong>: ${alert.message} (${alert.type})
+                        </div>
+                    </div>`;
+                container.innerHTML += alertHtml;
+            });
+            if (summaryMode && alerts.length > 3) {
+                container.innerHTML += `<li><hr class="dropdown-divider my-0"></li><li><a class="dropdown-item text-center py-2" href="#" onclick="event.preventDefault(); document.getElementById('alertsLink').click();">모든 알림 보기</a></li>`;
+            }
+        }
+
+        function renderSessionList(sessions, container) {
+            container.innerHTML = '';
+            if (!sessions || sessions.length === 0) {
+                container.innerHTML = '<p class="text-center text-muted p-3">예정되거나 진행중인 세션이 없습니다.</p>'; return;
+            }
+            sessions.forEach(session => {
+                const statusClass = { 'scheduled': 'status-scheduled', 'active': 'status-active', 'ended': 'status-ended' }[session.status] || 'status-ended';
+                const sessionHtml = `
+                    <div class="card mb-3 ${session.status === 'active' ? 'webex-session-card' : ''}">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h5 class="card-title mb-0">${name}</h5>
-                                <span class="patient-status status-${status}"></span>
+                                <h5 class="card-title mb-0">${session.title || '세션'}</h5>
+                                <span class="session-status ${statusClass}">${session.status}</span>
                             </div>
-                            <div class="d-flex align-items-center mb-1">
-                                <div class="glucose-value">${lastGlucose}</div>
-                                <div class="glucose-unit ms-1">mg/dL</div>
-                                <div class="glucose-trend ${trendInfo.class}"><i class="bi ${trendInfo.icon}"></i></div>
-                            </div>
-                            <small class="text-muted">최근 업데이트: ${lastUpdate}</small>
+                            <p class="card-text mb-1">
+                                <i class="bi bi-person"></i> 환자: ${session.patientName || '정보 없음'}
+                            </p>
+                            <p class="card-text mb-2">
+                                <i class="bi bi-clock"></i> 시간: ${formatTimestamp(session.startTime)}
+                            </p>
+                            ${session.status !== 'ended' && session.joinUrl ?
+                            `<a href="${session.joinUrl}" target="_blank" class="btn btn-sm btn-success"><i class="bi bi-camera-video-fill"></i> 세션 참여</a>` : ''
+                            }
+                            ${session.status === 'scheduled' ?
+                            `<button class="btn btn-sm btn-outline-danger ms-2" onclick="cancelSession('${session.id}')"><i class="bi bi-x-circle"></i> 예약 취소</button>` : ''
+                            }
+                            ${session.status === 'active' ?
+                                `<button class="btn btn-sm btn-danger ms-2" onclick="endSession('${session.id}')"><i class="bi bi-stop-circle"></i> 세션 종료</button>` : ''
+                            }
                         </div>
-                    </div>
-                </div>`;
-            container.innerHTML += cardHtml;
+                    </div>`;
+                container.innerHTML += sessionHtml;
+            });
+        }
+
+        async function getAllPatients() {
+            // 예약 모달용 환자 목록 로딩 함수
+            try {
+                const data = await fetchApi(`/api/doctors/${doctorId}/patients`);
+                return data?.patients ?? [];
+            } catch (error) {
+                console.error("예약용 환자 목록 로딩 실패:", error);
+                return [];
+            }
+        }
+
+        async function populatePatientSelect(patients) {
+            schedulePatientSelectEl.innerHTML = '<option selected disabled value="">환자를 선택하세요</option>'; // 초기화
+            if (patients && patients.length > 0) {
+                patients.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.id; // 환자 ID를 값으로 사용
+                    option.textContent = p.name;
+                    schedulePatientSelectEl.appendChild(option);
+                });
+            }
+        }
+
+
+        // --- 페이지/뷰 전환 함수 ---
+        function showContent(targetId) {
+            console.log("Showing content:", targetId);
+            mainContentArea.querySelectorAll(':scope > div[id]').forEach(el => el.style.display = 'none');
+            const targetElement = document.getElementById(targetId);
+            if (targetElement) {
+                targetElement.style.display = 'block';
+                // 해당 컨텐츠에 맞는 데이터 로드
+                if (targetId === 'dashboardContent') loadDashboardData();
+                else if (targetId === 'patientListContent') loadPatientListData();
+                else if (targetId === 'alertCenterContent') loadAlertsData();
+                else if (targetId === 'sessionContent') loadSessionsData();
+                else if (targetId === 'settingsContent') loadSettingsData();
+            } else {
+                console.warn(`타겟 컨텐츠 없음: ${targetId}, 대시보드 표시`);
+                dashboardContent.style.display = 'block'; loadDashboardData();
+            }
+        }
+
+        // --- 이벤트 리스너 ---
+        sidebarLinks.forEach(link => {
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                const targetId = link.getAttribute('data-target'); // data-target 속성 값 읽기
+                if (!targetId) return; // data-target 없으면 무시
+
+                sidebarLinks.forEach(l => l.classList.remove('active'));
+                link.classList.add('active');
+                showContent(targetId); // 해당 컨텐츠 보여주기
+            });
         });
-         if (summaryMode && patients.length > 3) {
-             container.innerHTML += `<div class="col-12 text-center mt-2"><a href="#" onclick="event.preventDefault(); document.getElementById('patientsLink').click();">전체 환자 보기</a></div>`;
-         }
-    }
 
-    function renderAlertList(alerts, container, summaryMode = false) {
-         container.innerHTML = '';
-         if (!alerts || alerts.length === 0) {
-             container.innerHTML = '<div class="notification-item text-muted text-center p-3">새 알림이 없습니다.</div>'; return;
-         }
-         const listToShow = summaryMode ? alerts.slice(0, 3) : alerts; // 요약 모드면 3개
+        // Webex 연결 버튼 클릭
+        connectWebexBtnEl.addEventListener('click', () => {
+            if (confirm("Webex 계정을 연결/재인증하시겠습니까? Webex 로그인 페이지로 이동합니다.")) {
+                window.location.href = `${backendUrl}/api/webex/auth/initiate?user_id=${doctorId}`;
+            }
+        });
 
-         listToShow.forEach(alert => {
-            const patientName = alert.patientName || alert.patientId || '알 수 없음'; // 환자 이름 표시
-            const alertClass = alert.status === 'active' ? 'notification-unread' : '';
-            const alertHtml = `
-                 <div class="notification-item ${alertClass}" onclick="viewPatientDetail('${alert.patientId}')">
-                    <div class="notification-time">${formatTimeAgo(alert.timestamp)}</div>
-                    <div class="notification-content">
-                        <strong>${patientName}</strong>: ${alert.message} (${alert.type})
-                    </div>
-                </div>`;
-             container.innerHTML += alertHtml;
-         });
-          if (summaryMode && alerts.length > 3) {
-             container.innerHTML += `<li><hr class="dropdown-divider my-0"></li><li><a class="dropdown-item text-center py-2" href="#" onclick="event.preventDefault(); document.getElementById('alertsLink').click();">모든 알림 보기</a></li>`;
-         }
-    }
+        // 예약 생성 버튼 클릭
+        submitScheduleBtnEl.addEventListener('click', async () => {
+            const selectedPatientId = schedulePatientSelectEl.value;
+            const startDateTimeLocal = document.getElementById('scheduleDateTime').value;
+            const duration = document.getElementById('scheduleDuration').value;
+            const notes = document.getElementById('scheduleNotes').value;
 
-     function renderSessionList(sessions, container) {
-         container.innerHTML = '';
-         if (!sessions || sessions.length === 0) {
-             container.innerHTML = '<p class="text-center text-muted p-3">예정되거나 진행중인 세션이 없습니다.</p>'; return;
-         }
-         sessions.forEach(session => {
-             const statusClass = { 'scheduled': 'status-scheduled', 'active': 'status-active', 'ended': 'status-ended' }[session.status] || 'status-ended';
-             const sessionHtml = `
-                <div class="card mb-3 ${session.status === 'active' ? 'webex-session-card' : ''}">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="card-title mb-0">${session.title || '세션'}</h5>
-                            <span class="session-status ${statusClass}">${session.status}</span>
-                        </div>
-                        <p class="card-text mb-1">
-                            <i class="bi bi-person"></i> 환자: ${session.patientName || '정보 없음'}
-                        </p>
-                        <p class="card-text mb-2">
-                            <i class="bi bi-clock"></i> 시간: ${formatTimestamp(session.startTime)}
-                        </p>
-                        ${session.status !== 'ended' && session.joinUrl ?
-                           `<a href="${session.joinUrl}" target="_blank" class="btn btn-sm btn-success"><i class="bi bi-camera-video-fill"></i> 세션 참여</a>` : ''
+            if (!selectedPatientId) { alert("환자를 선택하세요."); return; }
+            if (!startDateTimeLocal) { alert("예약 시간을 선택하세요."); return; }
+
+            // 로컬 시간을 ISO 8601 UTC 문자열로 변환
+            const startDateTimeUtc = moment(startDateTimeLocal).utc().toISOString();
+
+            showLoading('예약 생성 중...');
+            try {
+                const payload = {
+                    patient_id: selectedPatientId,
+                    start_time: startDateTimeUtc,
+                    duration_minutes: parseInt(duration) || 30,
+                    notes: notes,
+                    requesting_user_id: doctorId // 예약 요청자(의사) ID 전달
+                };
+                const response = await fetch(`${backendUrl}/api/webex/schedule_checkup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                hideLoading();
+                const result = await response.json();
+                if (response.ok) {
+                    alert(`예약 생성 성공! ${result.join_url ? '참여 URL: ' + result.join_url : ''}`);
+                    // 모달 닫고 세션 목록 새로고침
+                    bootstrap.Modal.getInstance(document.getElementById('scheduleModal')).hide();
+                    loadSessionsData();
+                } else {
+                    if (response.status === 401 && result.reauth_url) {
+                        if (confirm("Webex 인증이 필요합니다. 인증 페이지로 이동하시겠습니까?")) {
+                            window.location.href = result.reauth_url;
                         }
-                         ${session.status === 'scheduled' ?
-                           `<button class="btn btn-sm btn-outline-danger ms-2" onclick="cancelSession('${session.id}')"><i class="bi bi-x-circle"></i> 예약 취소</button>` : ''
-                         }
-                         ${session.status === 'active' ?
-                            `<button class="btn btn-sm btn-danger ms-2" onclick="endSession('${session.id}')"><i class="bi bi-stop-circle"></i> 세션 종료</button>` : ''
-                         }
-                    </div>
-                </div>`;
-             container.innerHTML += sessionHtml;
-         });
-     }
-
-     async function getAllPatients() {
-         // 예약 모달용 환자 목록 로딩 함수
-         try {
-             const data = await fetchApi(`/api/doctors/${doctorId}/patients`);
-             return data?.patients ?? [];
-         } catch (error) {
-             console.error("예약용 환자 목록 로딩 실패:", error);
-             return [];
-         }
-     }
-
-     async function populatePatientSelect(patients) {
-         schedulePatientSelectEl.innerHTML = '<option selected disabled value="">환자를 선택하세요</option>'; // 초기화
-         if (patients && patients.length > 0) {
-             patients.forEach(p => {
-                 const option = document.createElement('option');
-                 option.value = p.id; // 환자 ID를 값으로 사용
-                 option.textContent = p.name;
-                 schedulePatientSelectEl.appendChild(option);
-             });
-         }
-     }
-
-
-    // --- 페이지/뷰 전환 함수 ---
-    function showContent(targetId) {
-        console.log("Showing content:", targetId);
-        mainContentArea.querySelectorAll(':scope > div[id]').forEach(el => el.style.display = 'none');
-        const targetElement = document.getElementById(targetId);
-        if (targetElement) {
-            targetElement.style.display = 'block';
-            // 해당 컨텐츠에 맞는 데이터 로드
-            if (targetId === 'dashboardContent') loadDashboardData();
-            else if (targetId === 'patientListContent') loadPatientListData();
-            else if (targetId === 'alertCenterContent') loadAlertsData();
-            else if (targetId === 'sessionContent') loadSessionsData();
-            else if (targetId === 'settingsContent') loadSettingsData();
-        } else {
-            console.warn(`타겟 컨텐츠 없음: ${targetId}, 대시보드 표시`);
-            dashboardContent.style.display = 'block'; loadDashboardData();
-        }
-    }
-
-    // --- 이벤트 리스너 ---
-    sidebarLinks.forEach(link => {
-        link.addEventListener('click', (event) => {
-            event.preventDefault();
-            const targetId = link.getAttribute('data-target'); // data-target 속성 값 읽기
-            if (!targetId) return; // data-target 없으면 무시
-
-            sidebarLinks.forEach(l => l.classList.remove('active'));
-            link.classList.add('active');
-            showContent(targetId); // 해당 컨텐츠 보여주기
+                    } else {
+                        alert(`예약 생성 실패: ${result.error || response.statusText}`);
+                    }
+                }
+            } catch (error) {
+                hideLoading();
+                console.error("예약 생성 오류:", error);
+                alert("예약 생성 중 오류 발생");
+            }
         });
-    });
 
-    // Webex 연결 버튼 클릭
-    connectWebexBtnEl.addEventListener('click', () => {
-        if (confirm("Webex 계정을 연결/재인증하시겠습니까? Webex 로그인 페이지로 이동합니다.")) {
-            window.location.href = `${backendUrl}/api/webex/auth/initiate?user_id=${doctorId}`;
+        // --- 환자 상세 보기 함수 ---
+        function viewPatientDetail(pId) {
+            console.log(`환자 상세 보기: ${pId}`);
+            // TODO: 환자용 프론트엔드 URL로 이동 (새 탭 또는 현재 탭)
+            if (PATIENT_FRONTEND_URL) {
+                window.open(`${PATIENT_FRONTEND_URL}?patient_id=${pId}`, '_blank'); // 새 탭에서 열기
+            } else {
+                alert("환자 상세 화면 URL이 설정되지 않았습니다.");
+            }
         }
-    });
 
-    // 예약 생성 버튼 클릭
-    submitScheduleBtnEl.addEventListener('click', async () => {
-         const selectedPatientId = schedulePatientSelectEl.value;
-         const startDateTimeLocal = document.getElementById('scheduleDateTime').value;
-         const duration = document.getElementById('scheduleDuration').value;
-         const notes = document.getElementById('scheduleNotes').value;
-
-         if (!selectedPatientId) { alert("환자를 선택하세요."); return; }
-         if (!startDateTimeLocal) { alert("예약 시간을 선택하세요."); return; }
-
-         // 로컬 시간을 ISO 8601 UTC 문자열로 변환
-         const startDateTimeUtc = moment(startDateTimeLocal).utc().toISOString();
-
-         showLoading('예약 생성 중...');
-         try {
-             const payload = {
-                 patient_id: selectedPatientId,
-                 start_time: startDateTimeUtc,
-                 duration_minutes: parseInt(duration) || 30,
-                 notes: notes,
-                 requesting_user_id: doctorId // 예약 요청자(의사) ID 전달
-             };
-             const response = await fetch(`${backendUrl}/api/webex/schedule_checkup`, {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify(payload)
-             });
-             hideLoading();
-             const result = await response.json();
-             if (response.ok) {
-                 alert(`예약 생성 성공! ${result.join_url ? '참여 URL: ' + result.join_url : ''}`);
-                 // 모달 닫고 세션 목록 새로고침
-                 bootstrap.Modal.getInstance(document.getElementById('scheduleModal')).hide();
-                 loadSessionsData();
-             } else {
-                  if (response.status === 401 && result.reauth_url) {
-                     if (confirm("Webex 인증이 필요합니다. 인증 페이지로 이동하시겠습니까?")) {
-                          window.location.href = result.reauth_url;
-                     }
-                 } else {
-                     alert(`예약 생성 실패: ${result.error || response.statusText}`);
-                 }
-             }
-         } catch (error) {
-             hideLoading();
-             console.error("예약 생성 오류:", error);
-             alert("예약 생성 중 오류 발생");
-         }
-    });
-
-    // --- 환자 상세 보기 함수 ---
-    function viewPatientDetail(pId) {
-         console.log(`환자 상세 보기: ${pId}`);
-         // TODO: 환자용 프론트엔드 URL로 이동 (새 탭 또는 현재 탭)
-         if (PATIENT_FRONTEND_URL) {
-              window.open(`${PATIENT_FRONTEND_URL}?patient_id=${pId}`, '_blank'); // 새 탭에서 열기
-         } else {
-              alert("환자 상세 화면 URL이 설정되지 않았습니다.");
-         }
-     }
-
-     // --- Webex 세션 관련 함수 (임시) ---
-     function cancelSession(sessionId) {
-         if(confirm(`세션 (${sessionId}) 예약을 취소하시겠습니까?`)) {
-             alert("예약 취소 기능 미구현");
-             // TODO: 백엔드에 예약 취소 API 구현 및 호출
-         }
-     }
-     function endSession(sessionId) {
-         if(confirm(`세션 (${sessionId})을(를) 종료하시겠습니까?`)) {
-             alert("세션 종료 기능 미구현");
-              // TODO: 백엔드에 세션 종료 API 구현 및 호출
-         }
-     }
+        // --- Webex 세션 관련 함수 (임시) ---
+        function cancelSession(sessionId) {
+            if(confirm(`세션 (${sessionId}) 예약을 취소하시겠습니까?`)) {
+                alert("예약 취소 기능 미구현");
+                // TODO: 백엔드에 예약 취소 API 구현 및 호출
+            }
+        }
+        function endSession(sessionId) {
+            if(confirm(`세션 (${sessionId})을(를) 종료하시겠습니까?`)) {
+                alert("세션 종료 기능 미구현");
+                // TODO: 백엔드에 세션 종료 API 구현 및 호출
+            }
+        }
 
 
-    // --- 초기화 ---
-    document.addEventListener('DOMContentLoaded', () => {
-        showContent('dashboardContent'); // 초기 화면: 대시보드
-    });
-</script>
+        // --- 초기화 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            showContent('dashboardContent'); // 초기 화면: 대시보드
+        });
+    </script>
+
+</body>
+</html>
