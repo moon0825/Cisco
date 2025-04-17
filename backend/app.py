@@ -45,8 +45,20 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'fallback-dev-secret-key-sho
 if app.secret_key == 'fallback-dev-secret-key-should-be-set' and os.environ.get('VERCEL') == '1':
      print("!!! 경고: FLASK_SECRET_KEY 환경 변수가 설정되지 않았습니다. !!!")
 
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://cisco-git-main-kihoon-moons-projects.vercel.app")
-CORS(app, origins=[FRONTEND_URL, "http://localhost:5000"], supports_credentials=True)
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://cisco-git-main-kihoon-moons-projects.vercel.app") # 환자용
+DASHBOARD_URL = os.environ.get("DASHBOARD_URL") # 의료진 대시보드용 (새로 추가)
+
+allowed_origins = [FRONTEND_URL, "http://localhost:5000", "http://localhost:3000"] # 로컬 개발 환경 추가
+if DASHBOARD_URL:
+    allowed_origins.append(DASHBOARD_URL)
+    print(f"의료진 대시보드 CORS 허용: {DASHBOARD_URL}")
+else:
+    # 대시보드 URL 환경변수가 없으면 경고만 출력하거나, 기본값을 넣을 수도 있음
+    print("!!! 경고: DASHBOARD_URL 환경 변수가 설정되지 않았습니다. 대시보드 CORS 문제가 발생할 수 있습니다. !!!")
+    # allowed_origins.append("https://cisco-wten.vercel.app") # 또는 여기에 직접 추가
+
+# 수정된 origins 리스트 사용
+CORS(app, origins=allowed_origins, supports_credentials=True)
 api = Api(app)
 
 # --- Webex OAuth 설정 ---
