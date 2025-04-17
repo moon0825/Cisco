@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment-timezone@0.5.40/builds/moment-timezone-with-data.min.js"></script>
 
     <style>
         :root {
@@ -345,10 +346,10 @@
             <div class="card-body">
                 <div class="mb-3">
                     <label for="stateInput" class="form-label">상태</label>
-                    <input type="text" class="form-control" id="stateInput" placeholder="예: 정상, 식후">
+                    <input type="text" class="form-control" id="stateInput" placeholder="예: 식사, 운동">
                 </div>
                 <div class="mb-3">
-                    <label for="mealInput" class="form-label">식사량 (g)</label>
+                    <label for="mealInput" class="form-label">칼로리 (kcal)</label>
                     <input type="number" class="form-control" id="mealInput" placeholder="예: 50">
                 </div>
                 <button class="btn btn-action" onclick="submitState()">상태 입력</button>
@@ -445,7 +446,7 @@
 
     <script>
         const patientId = 'kimjaehoug';
-        const backendUrl = 'https://cisco-ejsn.vercel.app';
+        const backendUrl = window.location.hostname === 'localhost' ? 'http://127.0.0.1:5000' : 'http://10.55.56.37:5371';
         let glucoseChartInstance = null;
         let currentPatientData = {};
         let currentChartHours = 3;
@@ -492,9 +493,9 @@
                 return { icon: 'bi-dash', class: 'trend-stable', change: 0 };
             }
             const diff = currentValue - previousValue;
-            if (diff > 5) return { icon: 'bi-arrow-up', class: 'trend-up', change: diff };
-            if (diff < -5) return { icon: 'bi-arrow-down', class: 'trend-down', change: diff };
-            return { icon: 'bi-arrow-right', class: 'trend-stable', change: diff };
+            if (diff > 5) return { icon: 'bi-arrow-up', class: 'trend-up', change: diff.toFixed(2) };
+            if (diff < -5) return { icon: 'bi-arrow-down', class: 'trend-down', change: diff.toFixed(2) };
+            return { icon: 'bi-arrow-right', class: 'trend-stable', change: diff.toFixed(2) };
         }
 
         // --- UI 업데이트 함수 ---
@@ -515,17 +516,24 @@
                 predictionValue60El.innerText = '데이터 없음';
                 return;
             }
-            const sortedPredictions = predictions.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            const currentVal = sortedPredictions[0].value;
-            const pred30Val = sortedPredictions[1].value;
-            const pred60Val = sortedPredictions[2].value;
+            const sortedPredictions = predictions
+        .map(p => ({
+            timestamp: new Date(p.timestamp),
+            value: parseFloat(p.value)
+        }))
+        .sort((a, b) => a.timestamp - b.timestamp);
 
-            currentGlucoseValueEl.innerText = currentVal;
-            predictionValue30El.innerText = pred30Val;
-            predictionValue60El.innerText = pred60Val;
+    const currentVal = sortedPredictions[0].value;
+    const pred30Val = sortedPredictions[1].value;
+    const pred60Val = sortedPredictions[2].value;
+
+            currentGlucoseValueEl.innerText = currentVal.toFixed(2);
+            predictionValue30El.innerText = pred30Val.toFixed(2);
+predictionValue60El.innerText = pred60Val.toFixed(2);
 
             if (sortedPredictions[0].timestamp) {
-                lastUpdateTimeEl.innerText = `업데이트: ${moment(sortedPredictions[0].timestamp).fromNow()}`;
+                lastUpdateTimeEl.innerText = `업데이트: ${moment(sortedPredictions[0].timestamp).tz("Asia/Seoul").fromNow()
+}`;
             }
 
             const trendInfoCurrent = getTrendInfo(currentVal, null);
@@ -640,6 +648,7 @@
 
         function updateRecentLogsUI(readings) {
             recentLogsContainerEl.innerHTML = '';
+            console.log("ddddd",readings);
             if (!readings || readings.length === 0) {
                 recentLogsContainerEl.innerHTML = '<div class="log-item text-center text-muted p-3">최근 기록이 없습니다.</div>';
                 return;
@@ -651,8 +660,8 @@
                 logDiv.className = 'log-item d-flex justify-content-between align-items-center';
                 logDiv.innerHTML = `
                     <div>
-                        <div class="log-time">${moment(reading.timestamp).format('HH:mm')}</div>
-                        <div class="log-value">${reading.glucose} mg/dL</div>
+                        <div class="log-time">${moment(reading.timestamp).tz("Asia/Seoul").format('HH:mm')}</div>
+                        <div class="log-value">${reading.glucose.toFixed(2)} mg/dL</div>
                     </div>
                     <span class="log-source">${reading.source || 'CGM'}</span>
                 `;
@@ -672,8 +681,8 @@
                 logDiv.className = 'log-item d-flex justify-content-between align-items-center';
                 logDiv.innerHTML = `
                     <div>
-                        <div class="log-time">${moment(reading.timestamp).format('YYYY-MM-DD HH:mm')}</div>
-                        <div class="log-value">${reading.glucose} mg/dL</div>
+                        <div class="log-time">${moment(reading.timestamp).tz("Asia/Seoul").format('YYYY-MM-DD HH:mm')}</div>
+                        <div class="log-value">${reading.glucose.toFixed(2)} mg/dL</div>
                     </div>
                     <span class="log-source">${reading.source || 'CGM'}</span>
                 `;
@@ -682,25 +691,31 @@
         }
 
         function updateStateLogsUI(states) {
-            stateLogsContainerEl.innerHTML = '';
-            if (!states || states.length === 0) {
-                stateLogsContainerEl.innerHTML = '<div class="log-item text-center text-muted p-3">최근 상태 기록이 없습니다.</div>';
-                return;
-            }
+    stateLogsContainerEl.innerHTML = '';
+    if (!states || states.length === 0) {
+        stateLogsContainerEl.innerHTML = '<div class="log-item text-center text-muted p-3">최근 상태 기록이 없습니다.</div>';
+        return;
+    }
 
-            states.slice().reverse().forEach(state => {
-                const logDiv = document.createElement('div');
-                logDiv.className = 'log-item d-flex justify-content-between align-items-center';
-                logDiv.innerHTML = `
-                    <div>
-                        <div class="log-time">${moment(state.time).format('YYYY-MM-DD HH:mm')}</div>
-                        <div class="log-value">${state.state}</div>
-                    </div>
-                    <span class="log-source">식사량: ${state.meal}g</span>
-                `;
-                stateLogsContainerEl.appendChild(logDiv);
-            });
-        }
+    states.forEach(state => {
+        const logDiv = document.createElement('div');
+        logDiv.className = 'log-item d-flex justify-content-between align-items-center';
+
+        const label = state.state || '기록';
+        const mealStr = state.meal && state.meal > 0 ? `식사: ${state.meal} kcal` : '';
+        const exerciseStr = state.exercise && state.exercise > 0 ? `운동: ${state.exercise} kcal` : '';
+        const combinedStr = [mealStr, exerciseStr].filter(Boolean).join(', ');
+
+        logDiv.innerHTML = `
+            <div>
+                <div class="log-time">${moment(state.time).tz("Asia/Seoul").format('YYYY-MM-DD HH:mm')}</div>
+                <div class="log-value">${label}</div>
+            </div>
+            <span class="log-source">${combinedStr || '상세 없음'}</span>
+        `;
+        stateLogsContainerEl.appendChild(logDiv);
+    });
+}
 
         function updateChart(readings, hours = 3) {
             if (!readings || readings.length === 0) {
@@ -758,8 +773,10 @@
                         borderColor: 'rgb(255, 165, 0)',
                         borderWidth: 1.5,
                         borderDash: [10, 10],
-                        pointRadius: 0,
-                        fill: false
+                            pointRadius: 4,         // ← 점의 크기 (기본은 3~4)
+    pointStyle: 'circle',   // ← 원형 점
+    fill: false,
+    tension: 0.3
                     }
                 ]
             };
@@ -769,10 +786,12 @@
                     const response = await fetch(`${backendUrl}/api/patients/${patientId}/predictions`);
                     if (!response.ok) throw new Error(`예측 데이터 조회 실패: ${response.status}`);
                     const data = await response.json();
+                    console.log("pre",data);
                     const predictions = data.predictions.map(p => ({
-                        x: p.timestamp,
-                        y: p.value
+                        x: new Date(p.timestamp.replace(" ", "T")),  // ← 여기서 ISO 포맷으로 변경         // 날짜 파싱
+    y: parseFloat(p.value)
                     }));
+                    console.log("dddeee",predictions);
                     chartData.datasets[1].data = predictions;
                     if (glucoseChartInstance) {
                         glucoseChartInstance.data = chartData;
@@ -793,16 +812,21 @@
                     maintainAspectRatio: false,
                     scales: {
                         x: {
-                            type: 'time',
-                            time: {
-                                unit: hours <= 6 ? 'hour' : 'day',
-                                displayFormats: {
-                                    hour: 'HH:mm',
-                                    day: 'MM/DD'
-                                }
-                            },
-                            title: { display: true, text: '시간' }
-                        },
+    type: 'time',
+    time: {
+        unit: hours <= 6 ? 'hour' : 'day',
+        displayFormats: {
+            hour: 'HH:mm',
+            day: 'MM/DD'
+        }
+    },
+    adapters: {
+        date: {
+            zone: 'Asia/Seoul'
+        }
+    },
+    title: { display: true, text: '시간' }
+},
                         y: {
                             beginAtZero: false,
                             title: { display: true, text: '혈당 (mg/dL)' },
@@ -812,9 +836,18 @@
                     },
                     plugins: {
                         tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                        },
+    mode: 'nearest',
+    intersect: true,
+    callbacks: {
+        label: function(context) {
+    const value = context.parsed?.y ?? context.raw;
+    if (value === undefined || value === null || isNaN(value)) {
+        return `${context.dataset.label}: 데이터 없음`;
+    }
+    return `${context.dataset.label}: ${parseFloat(value).toFixed(2)} mg/dL`;
+}
+    }
+},
                         annotation: {
                             annotations: {
                                 line1: {
@@ -914,9 +947,56 @@
         if (response.ok) {
             const data = await response.json();
             const readings = Array.isArray(data.readings) ? data.readings : [];
-            console.log(readings);
-            const filteredReadings = readings.filter(r => r.timestamp?.startsWith(dateStr));
+
+            // 날짜별 필터
+            const filteredReadings = readings.filter(r => {
+    if (!r.timestamp) return false;
+    const dayStr = moment(r.timestamp).tz("Asia/Seoul").format("YYYY-MM-DD");
+    return dayStr === dateStr;
+});
+
+            // 1. 전체 기록 UI
             updateAllLogsUI(filteredReadings);
+
+            // 2. 최근 기록 UI (상단 최근 3개)
+            updateRecentLogsUI(filteredReadings);
+
+            // 3. 차트 업데이트
+            updateChart(filteredReadings, 24);  // 전체 기록은 하루 기준
+
+            // 4. 현재 혈당 및 트렌드 바 (가장 최신 데이터 기준)
+            if (filteredReadings.length > 0) {
+                const latest = filteredReadings[filteredReadings.length - 1];
+                const previous = filteredReadings.length >= 2
+                    ? filteredReadings[filteredReadings.length - 2]
+                    : null;
+
+                const currentVal = latest.glucose;
+                const prevVal = previous?.glucose ?? null;
+
+                currentGlucoseValueEl.innerText = currentVal.toFixed(2);
+                lastUpdateTimeEl.innerText = `업데이트: ${moment(latest.timestamp).tz("Asia/Seoul").fromNow()}`;
+
+                const trendInfo = getTrendInfo(currentVal, prevVal);
+                currentGlucoseTrendEl.innerHTML = `<i class="bi ${trendInfo.icon}"></i>`;
+                currentGlucoseTrendEl.className = `glucose-trend ${trendInfo.class}`;
+
+                // Progress bar 업데이트
+                const minTarget = currentPatientData.target_glucose_range?.min || 70;
+                const maxTarget = currentPatientData.target_glucose_range?.max || 180;
+                let progressPercent = ((currentVal - 40) / 260) * 100;
+                progressPercent = Math.max(0, Math.min(100, progressPercent));
+                glucoseProgressBarEl.style.width = `${progressPercent}%`;
+                glucoseProgressBarEl.classList.remove('bg-success', 'bg-warning', 'bg-danger');
+                if (currentVal < minTarget) {
+                    glucoseProgressBarEl.classList.add('bg-warning');
+                } else if (currentVal > maxTarget) {
+                    glucoseProgressBarEl.classList.add('bg-danger');
+                } else {
+                    glucoseProgressBarEl.classList.add('bg-success');
+                }
+            }
+
         } else {
             throw new Error('Failed to load logs');
         }
@@ -929,35 +1009,46 @@
 }
 
         async function submitState() {
-            const state = document.getElementById('stateInput').value;
-            const meal = parseInt(document.getElementById('mealInput').value);
-            if (!state || isNaN(meal)) {
-                alert('상태와 식사량을 입력하세요.');
-                return;
-            }
+    const state = document.getElementById('stateInput').value.trim();
+    const amount = parseFloat(document.getElementById('mealInput').value);
+    if (!state || isNaN(amount)) {
+        alert('상태와 수치를 입력하세요.');
+        return;
+    }
 
-            showLoading('상태 입력 중...');
-            try {
-                const response = await fetch(`${backendUrl}/api/patients/${patientId}/states`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ state, meal })
-                });
-                if (response.ok) {
-                    document.getElementById('stateInput').value = '';
-                    document.getElementById('mealInput').value = '';
-                    fetchData(currentChartHours);
-                } else {
-                    const errorResult = await response.json();
-                    alert(`상태 입력 실패: ${errorResult.error}`);
-                }
-            } catch (error) {
-                console.error('상태 입력 오류:', error);
-                alert('상태 입력 중 오류 발생');
-            } finally {
-                hideLoading();
-            }
+    // 상태에 따라 필드를 결정
+    let payload = {};
+    if (state === '식사') {
+        payload = { meal: amount };
+    } else if (state === '운동') {
+        payload = { exercise: amount };
+    } else {
+        alert('상태는 "식사" 또는 "운동"만 입력할 수 있습니다.');
+        return;
+    }
+
+    showLoading('상태 입력 중...');
+    try {
+        const response = await fetch(`${backendUrl}/api/patients/${patientId}/states`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (response.ok) {
+            document.getElementById('stateInput').value = '';
+            document.getElementById('mealInput').value = '';
+            fetchData(currentChartHours);
+        } else {
+            const errorResult = await response.json();
+            alert(`상태 입력 실패: ${errorResult.error}`);
         }
+    } catch (error) {
+        console.error('상태 입력 오류:', error);
+        alert('상태 입력 중 오류 발생');
+    } finally {
+        hideLoading();
+    }
+}
 
         // --- 이벤트 리스너 ---
         document.getElementById('emergencyBtn').addEventListener('click', async () => {
