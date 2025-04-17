@@ -13,8 +13,6 @@ from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.api_core import exceptions as google_exceptions
 
-# --- Firebase 초기화 ---
-# --- Firebase 초기화 ---
 # 환경 변수에서 서비스 계정 키 경로 가져오기, 기본값은 프로젝트 디렉토리의 JSON 파일
 # --- Firebase 초기화 ---
 SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "./ciscoglucose-firebase-adminsdk-fbsvc-3864a20e01.json")
