@@ -10,7 +10,7 @@ import random
 
 # Webex 통합 모듈 임포트
 try:
-    from webex_integration import WebexAPI, MedicalWebexIntegration
+    from backend.webex_integration import WebexAPI, MedicalWebexIntegration
 except ImportError:
     print("오류: webex_integration.py 파일을 찾을 수 없습니다.")
     # 시뮬레이션을 위한 더미 클래스 정의 (파일이 없을 경우)
