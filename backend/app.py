@@ -10,18 +10,25 @@ import random
 import firebase_admin
 from firebase_admin import credentials, firestore
 # Firestore 특정 예외나 FieldFilter 등을 사용하려면 추가 import 필요
-# from google.cloud.firestore_v1.base_query import FieldFilter
-# from google.api_core import exceptions as google_exceptions
+from google.cloud.firestore_v1.base_query import FieldFilter
+from google.api_core import exceptions as google_exceptions
 
 # --- Firebase 초기화 ---
-SERVICE_ACCOUNT_KEY_PATH = os.environ.get('ciscoglucose-firebase-adminsdk-fbsvc-e1faa4637f')
+# --- Firebase 초기화 ---
+# 환경 변수에서 서비스 계정 키 경로 가져오기, 기본값은 프로젝트 디렉토리의 JSON 파일
+SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "ciscoglucose-firebase-adminsdk-fbsvc-3864a20e01.json")
 db = None
 try:
-    # 서비스 계정 키 경로가 유효한지 확인
-    if not SERVICE_ACCOUNT_KEY_PATH or not os.path.exists(SERVICE_ACCOUNT_KEY_PATH):
-        raise ValueError("GOOGLE_APPLICATION_CREDENTIALS 환경 변수가 설정되지 않았거나, 해당 경로에 서비스 계정 키 파일이 없습니다.")
+    # 서비스 계정 키 파일 존재 여부 확인
+    print(f"Attempting to access service account key at: {SERVICE_ACCOUNT_KEY_PATH}")
+    if not os.path.exists(SERVICE_ACCOUNT_KEY_PATH):
+        raise FileNotFoundError(f"서비스 계정 키 파일이 존재하지 않습니다: {SERVICE_ACCOUNT_KEY_PATH}")
 
-    # 앱이 이미 초기화되었는지 확인 (서버리스 환경에서 중요)
+    # 파일 읽기 권한 확인
+    if not os.access(SERVICE_ACCOUNT_KEY_PATH, os.R_OK):
+        raise PermissionError(f"서비스 계정 키 파일에 읽기 권한이 없습니다: {SERVICE_ACCOUNT_KEY_PATH}")
+
+    # Firebase 앱 초기화
     if not firebase_admin._apps:
         cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH)
         firebase_admin.initialize_app(cred)
@@ -29,11 +36,17 @@ try:
     else:
         print("Firebase Admin SDK 이미 초기화됨")
 
-    db = firestore.client() # Firestore 클라이언트 가져오기
+    db = firestore.client()
     print("Firebase Firestore 연결 성공")
+except FileNotFoundError as e:
+    print(f"!!! Firebase 초기화 오류: 파일을 찾을 수 없습니다: {e} !!! Firestore 기능이 비활성화됩니다.")
+    db = None
+except PermissionError as e:
+    print(f"!!! Firebase 초기화 오류: 파일 접근 권한 문제: {e} !!! Firestore 기능이 비활성화됩니다.")
+    db = None
 except Exception as e:
     print(f"!!! Firebase 초기화 오류: {e} !!! Firestore 기능이 비활성화됩니다.")
-    db = None # 오류 발생 시 db를 None으로 설정
+    db = None
 
 # --- Flask 앱 설정 ---
 app = Flask(__name__)
