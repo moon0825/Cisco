@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
+from threading import Thread
+
+import pytz
+from flask import Flask, request, jsonify, send_from_directory  # send_from_directory 제거
 from flask import Flask, request, jsonify, redirect, session, url_for
 from flask_restful import Api, Resource
 from flask_cors import CORS
 import os
 import json
+from apscheduler.schedulers.background import BackgroundScheduler
 import time
 from datetime import datetime, timedelta, timezone
 import random
@@ -12,6 +17,11 @@ import uuid     # OAuth state 생성용
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.api_core import exceptions as google_exceptions
+import numpy as np
+from bit_maml import run_prediction_task
+from bit_maml import predict_and_store_once
+
+KST = pytz.timezone("Asia/Seoul")
 import base64 # Base64 디코딩용
 import json   # JSON 파싱용
 
@@ -39,6 +49,36 @@ except Exception as e:
     print(f"!!! Firebase 초기화 중 심각한 오류 발생: {e} !!!")
     db = None
 
+
+# 최근 12개 데이터를 가져오는 함수
+def get_recent_glucose_features(patient_id, limit=12):
+    logs_ref = db.collection("users").document("kimjaehoug").collection("glulog")
+    logs = logs_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(limit).stream()
+
+    data = []
+    for log in logs:
+        entry = log.to_dict()
+        if 'glucose' in entry and 'exercise' in entry and 'meal' in entry:
+            data.append([
+                float(entry["glucose"]),
+                float(entry["exercise"]),
+                float(entry["meal"])
+            ])
+
+    if len(data) < limit:
+        raise ValueError("Not enough recent data (need at least 12)")
+
+    return np.array(data[::-1])
+
+
+# 예측하고 저장하는 함수
+
+
+# 백그라운드 쓰레드
+
+
+
+# 서버 시작 시 백그라운드 루프 시작
 # --- Flask 앱 설정 ---
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'fallback-dev-secret-key-should-be-set')
@@ -91,7 +131,8 @@ ALERTS_COLLECTION = 'alerts'
 TOKENS_COLLECTION = 'webex_tokens'
 DOCTORS_COLLECTION = 'doctors' # 의사 정보용 (선택적)
 
-# --- Helper Function ---
+# --- Helper Function (기존 코드 유지) ---
+# 한국 시간대 (KST)
 def firestore_timestamp_to_iso(timestamp):
     if timestamp and hasattr(timestamp, 'isoformat'):
         dt = timestamp # Assume it's already a datetime object from Firestore
@@ -141,6 +182,25 @@ def refresh_tokens(user_id, refresh_token):
             print("Refresh Token 만료/오류 가능성. 재인증 필요.")
             try: db.collection(TOKENS_COLLECTION).document(user_id).delete(); print(f"갱신 실패로 사용자 {user_id} 토큰 삭제됨")
             except: pass
+    if timestamp is None:
+        return None
+
+    try:
+        # Firestore Timestamp 객체 (datetime)
+        if isinstance(timestamp, datetime):
+            return timestamp.isoformat(timespec='seconds')
+
+        # 문자열인 경우
+        if isinstance(timestamp, str):
+            try:
+                dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+                return dt.isoformat(timespec='seconds')
+            except ValueError:
+                print(f"[경고] 문자열 timestamp 파싱 실패: {timestamp}")
+                return None
+
+    except Exception as e:
+        print(f"[에러] timestamp 변환 실패: {timestamp} → {e}")
         return None
 
 def get_valid_webex_token(user_id):
@@ -218,18 +278,123 @@ def webex_auth_callback():
 
 class PatientResource(Resource):
     def get(self, patient_id):
-        if not db: return {"error": "DB 미연결"}, 503
+        if not db:
+            return {"error": "Database service unavailable"}, 503
         try:
-            doc_ref = db.collection(PATIENTS_COLLECTION).document(patient_id)
-            doc = doc_ref.get()
-            if doc.exists:
-                return doc.to_dict(), 200
-            else:
-                return {"error": "환자 없음"}, 404
-        except Exception as e:
-            print(f"환자({patient_id}) 조회 오류: {e}")
-            return {"error": "서버 오류 (환자 조회)"}, 500
+            patient_ref = db.collection('users').document(patient_id)
+            doc = patient_ref.get()
 
+            if doc.exists:
+                data = doc.to_dict()
+                # 직렬화 불가능한 타입 정제
+                for key, value in data.items():
+                    if isinstance(value, set):
+                        data[key] = list(value)
+
+                # 누락된 필드 보완
+                data.setdefault("name", "이름 없음")
+                data.setdefault("target_glucose_range", {"min": 70, "max": 180})
+                return data, 200
+
+            else:
+                # 문서 없을 시 기본 환자 정보 리턴
+                default_data = {
+                    "name": "김재홍",
+                    "target_glucose_range": {"min": 40, "max": 200}
+                }
+                return default_data, 200
+
+        except Exception as e:
+            print(f"[PatientResource.get] Error for patient_id={patient_id}: {e}")
+            return {"error": "Internal server error fetching patient data"}, 500
+
+
+
+class StateResource(Resource):
+    def get(self, patient_id):
+        """상태 기록 조회"""
+        if not db:
+            return {"error": "Database unavailable"}, 503
+        try:
+            docs = db.collection("state").document(patient_id).collection("log") \
+                .order_by("time", direction=firestore.Query.DESCENDING) \
+                .limit(50).stream()
+
+            states = []
+            for doc in docs:
+                data = doc.to_dict()
+                time_raw = data.get("time")
+                # time 필드가 datetime일 경우 ISO 포맷으로 직렬화
+                if isinstance(time_raw, datetime):
+                    time_str = time_raw.astimezone(pytz.timezone("Asia/Seoul")).isoformat()
+                else:
+                    time_str = time_raw  # 혹시 모르니 fallback
+
+                states.append({
+                    "time": time_str,
+                    "state": data.get("state"),
+                    "meal": data.get("meal", 0),
+                    "exercise": data.get("exercise", 0)
+                })
+
+            return {"states": states}, 200
+
+        except Exception as e:
+            print(f"[StateResource.get] Error: {e}")
+            return {"error": "Internal server error fetching states"}, 500
+
+    def post(self, patient_id):
+        if not db:
+            return {"error": "Database unavailable"}, 503
+        try:
+            payload = request.get_json()
+            if not payload:
+                return {"error": "No input data provided"}, 400
+
+            # 어떤 상태인지 판별
+            field_name = None
+            value = None
+            if "meal" in payload:
+                field_name = "meal"
+                value = float(payload["meal"])
+                state_type = "meal"
+            elif "exercise" in payload:
+                field_name = "exercise"
+                value = float(payload["exercise"])
+                state_type = "exercise"
+            else:
+                return {"error": "Invalid state type. Only 'meal' or 'exercise' allowed."}, 400
+
+            # --- 1단계: glulog 가장 최근 데이터 업데이트 ---
+            logs_ref = db.collection("users").document(patient_id).collection("glulog")
+            docs = logs_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(1).stream()
+            recent_doc = next(docs, None)
+
+            if not recent_doc:
+                return {"error": "No existing glucose log found to update"}, 404
+
+            recent_doc_ref = logs_ref.document(recent_doc.id)
+            recent_doc_ref.update({field_name: value})
+
+            # --- 2단계: state/{patient_id}/{timestamp} 저장 ---
+            now_kst = datetime.now(pytz.timezone("Asia/Seoul"))
+            timestamp_str = now_kst.strftime("%Y-%m-%d %H:%M:%S")
+
+            state_ref = db.collection("state").document(patient_id).collection("log").document(timestamp_str)
+            state_ref.set({
+                "state": state_type,
+                "value": value,
+                "time": timestamp_str,
+                "patient_id": patient_id
+            })
+
+            print(f"[StateResource.post] ✅ {field_name}={value} 업데이트 완료 & 상태 기록 저장")
+            predict_and_store_once(patient_id)
+            return {"message": f"{field_name} updated & state saved"}, 200
+
+        except Exception as e:
+            print(f"[StateResource.post] Error: {e}")
+            return {"error": "Internal server error updating state"}, 500
 class GlucoseResource(Resource):
     def get(self, patient_id):
         if not db: return {"error": "DB 미연결"}, 503
@@ -370,21 +535,28 @@ class GlucoseResource(Resource):
 
 class PredictionResource(Resource):
     def get(self, patient_id):
-        if not db: return {"error": "DB 미연결"}, 503
+        if not db:
+            return {"error": "Database service unavailable"}, 503
         try:
-            doc = db.collection(PREDICTIONS_COLLECTION).document(patient_id).get()
-            if doc.exists:
-                 data = doc.to_dict()
-                 for key in ['current', 'prediction_30min', 'prediction_60min']:
-                     if key in data and data[key] and 'timestamp' in data[key]:
-                         data[key]['timestamp'] = firestore_timestamp_to_iso(data[key].get('timestamp'))
-                 data['updated_at'] = firestore_timestamp_to_iso(data.get('updated_at'))
-                 return data, 200
-            else:
-                 return {"error": "아직 예측 정보 없음"}, 404
+            # Firestore에서 해당 환자의 예측 데이터 조회
+            pred_ref = db.collection("users").document(patient_id).collection("predict")
+            docs = pred_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(20).stream()
+
+            predictions = []
+            for doc in docs:
+                data = doc.to_dict()
+                predictions.append({
+                    "timestamp": data.get("timestamp"),
+                    "value": data.get("value"),
+                    "predicted_at": data.get("predicted_at")
+                })
+
+            return {"predictions": predictions}, 200
+
         except Exception as e:
-            print(f"예측({patient_id}) 조회 오류: {e}")
-            return {"error": "서버 오류 (예측 조회)"}, 500
+            print(f"[PredictionResource.get] Error for patient_id={patient_id}: {e}")
+            return {"error": "Internal server error fetching predictions"}, 500
+
 
 class AlertResource(Resource):
     def get(self, patient_id):
@@ -704,25 +876,49 @@ api.add_resource(AlertResource, '/api/patients/<string:patient_id>/alerts', '/ap
 api.add_resource(WebexEmergencyConnect, '/api/webex/emergency_connect')
 api.add_resource(WebexScheduleCheckup, '/api/webex/schedule_checkup')
 api.add_resource(SeedDemoData, '/api/seed_demo_data')
+api.add_resource(StateResource, '/api/patients/<string:patient_id>/states')
 
 # 서버 상태 확인 엔드포인트
-@app.route('/api/status', methods=['GET'])
-def status():
-    webex_config_status = "Configured" if all([WEBEX_CLIENT_ID, WEBEX_CLIENT_SECRET, WEBEX_REDIRECT_URI]) else "Not Configured"
-    db_status = "Connected" if db else "Disconnected"
-    return jsonify({
-        "status": "online", "version": "0.7.0-oauth-firestore", # 버전 업데이트
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "webex_config_status": webex_config_status,
-        "database_status": db_status
-    })
 
-# --- 정적 파일 서빙 라우트 제거 ---
+
+# 프론트엔드 제공 라우트
+@app.route('/')
+def serve_index():
+    index_path = 'index.html'
+    static_folder = '../frontend'
+    print(f"Serving {index_path} from {static_folder}")
+    try:
+        if not os.path.exists(os.path.join(static_folder, index_path)):
+            raise FileNotFoundError(f"{index_path} 파일이 {static_folder} 폴더에 존재하지 않습니다.")
+        return send_from_directory(static_folder, index_path)
+    except FileNotFoundError as e:
+        print(f"!!! 오류: {e} !!!")
+        return jsonify({"error": f"Frontend file not found: {index_path} in {static_folder}"}), 404
+    except Exception as e:
+        print(f"!!! 오류: {e} !!!")
+        return jsonify({"error": "Internal server error serving frontend"}), 500
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    static_folder = '../frontend/static/'
+    print(f"Serving static file {filename} from {static_folder}")
+    try:
+        if not os.path.exists(os.path.join(static_folder, filename)):
+            raise FileNotFoundError(f"{filename} 파일이 {static_folder} 폴더에 존재하지 않습니다.")
+        return send_from_directory(static_folder, filename)
+    except FileNotFoundError as e:
+        print(f"!!! 오류: {e} !!!")
+        return jsonify({"error": f"Static file not found: {filename} in {static_folder}"}), 404
+    except Exception as e:
+        print(f"!!! 오류: {e} !!!")
+        return jsonify({"error": "Internal server error serving static file"}), 500
 
 # --- 메인 실행 ---
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print(f"Starting server on port {port}...")
+
+    Thread(target=run_prediction_task, daemon=True).start()
+    # Vercel 배포 환경 감지하여 디버그 모드 결정
     is_vercel = os.environ.get('VERCEL') == '1'
     # Vercel에서는 debug=False, 로컬에서는 True
     app.run(host='0.0.0.0', port=port, debug=not is_vercel)
