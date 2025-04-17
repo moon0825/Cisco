@@ -55,7 +55,7 @@ WEBEX_CLIENT_SECRET = os.environ.get('WEBEX_CLIENT_SECRET')
 WEBEX_REDIRECT_URI = os.environ.get('WEBEX_REDIRECT_URI')
 WEBEX_AUTHORIZE_URL = "https://webexapis.com/v1/authorize"
 WEBEX_TOKEN_URL = "https://webexapis.com/v1/access_token"
-WEBEX_SCOPES = os.environ.get("WEBEX_SCOPES", "spark:messages_write meeting:schedules_write meeting:schedules_read spark:people_read")
+WEBEX_SCOPES = os.environ.get("WEBEX_SCOPES", "spark:messages_write meeting:schedules_write meeting:schedules_read spark:people_read spark:rooms_write spark:teams_write spark:team_memberships_write" )
 
 # --- Webex 통합 모듈 임포트 ---
 try:
