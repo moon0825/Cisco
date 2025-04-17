@@ -445,7 +445,7 @@
 
     <script>
         const patientId = 'kimjaehoug';
-        const backendUrl = window.location.hostname === 'localhost' ? 'http://127.0.0.1:5371' : 'http://10.55.56.37:5371';
+        const backendUrl = 'https://cisco-ejsn.vercel.app';
         let glucoseChartInstance = null;
         let currentPatientData = {};
         let currentChartHours = 3;
@@ -654,7 +654,7 @@
                         <div class="log-time">${moment(reading.timestamp).format('HH:mm')}</div>
                         <div class="log-value">${reading.glucose} mg/dL</div>
                     </div>
-                    <span class="log-source">${reading.source || 'Unknown'}</span>
+                    <span class="log-source">${reading.source || 'CGM'}</span>
                 `;
                 recentLogsContainerEl.appendChild(logDiv);
             });
@@ -675,7 +675,7 @@
                         <div class="log-time">${moment(reading.timestamp).format('YYYY-MM-DD HH:mm')}</div>
                         <div class="log-value">${reading.glucose} mg/dL</div>
                     </div>
-                    <span class="log-source">${reading.source || 'Unknown'}</span>
+                    <span class="log-source">${reading.source || 'CGM'}</span>
                 `;
                 allLogsContainerEl.appendChild(logDiv);
             });
@@ -913,7 +913,9 @@
         const response = await fetch(`${backendUrl}/api/patients/${patientId}/glucose`);
         if (response.ok) {
             const data = await response.json();
-            const filteredReadings = data.readings.filter(r => r.timestamp.startsWith(dateStr));
+            const readings = Array.isArray(data.readings) ? data.readings : [];
+            console.log(readings);
+            const filteredReadings = readings.filter(r => r.timestamp?.startsWith(dateStr));
             updateAllLogsUI(filteredReadings);
         } else {
             throw new Error('Failed to load logs');
