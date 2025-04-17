@@ -82,7 +82,7 @@ def get_recent_glucose_features(patient_id, limit=12):
 # --- Flask 앱 설정 ---
 app = Flask(__name__,static_folder=None)
 # CORS 설정: 프론트엔드 Vercel 주소를 명시적으로 허용하는 것이 좋음
-FRONTEND_URL = os.environ.get("FRONTEND_URL","https://127.0.0.1:5371") # 기본값 설정
+FRONTEND_URL = os.environ.get("FRONTEND_URL","https://cisco-git-main-kihoon-moons-projects.vercel.app") # 기본값 설정
 CORS(app, origins=[FRONTEND_URL, "http://localhost:5000","*"], supports_credentials=True) # 로컬 및 배포 주소 허용
 api = Api(app)
 # --- Webex OAuth 설정 ---
@@ -566,7 +566,7 @@ def serve_static(filename):
 
 # --- 메인 실행 ---
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5371)) # 포트 번호 변경 가능성 고려 (기존 5371?)
+    port = int(os.environ.get('PORT', 5000)) # 포트 번호 변경 가능성 고려 (기존 5371?)
     print(f"Starting server on port {port}...")
 
     Thread(target=run_prediction_task, daemon=True).start()
